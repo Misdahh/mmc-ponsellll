@@ -1,0 +1,1 @@
+# MMC PONSEL release rules
