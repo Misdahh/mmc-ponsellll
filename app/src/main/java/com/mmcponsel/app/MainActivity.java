@@ -305,8 +305,12 @@ public class MainActivity extends Activity {
                     .build();
             GetCredentialRequest request=new GetCredentialRequest.Builder()
                     .addCredentialOption(googleIdOption).build();
-            credentialManager.getCredentialAsync(request,new CancellationSignal(),authExecutor,
-                    new CredentialManagerCallback<Credential, GetCredentialException>() {
+            credentialManager.getCredentialAsync(
+    MainActivity.this,
+    request,
+    new CancellationSignal(),
+    authExecutor,
+    new CredentialManagerCallback<...>() {
                         @Override public void onResult(@NonNull Credential credential){
                             runOnUiThread(()->handleGoogleCredential(credential));
                         }
