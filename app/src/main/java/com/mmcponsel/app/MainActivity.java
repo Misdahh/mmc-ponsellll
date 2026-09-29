@@ -36,7 +36,7 @@ import androidx.credentials.CredentialManagerCallback;
 import androidx.credentials.CustomCredential;
 import androidx.credentials.GetCredentialRequest;
 import androidx.credentials.GetCredentialResponse;
-import androidx.credentials.GetCredentialException;
+import androidx.credentials.exceptions.GetCredentialException;
 
 import com.facebook.AccessToken;
 import com.facebook.CallbackManager;
