@@ -11,6 +11,8 @@ import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.Path;
 import android.net.Uri;
+import android.net.ConnectivityManager;
+import android.net.NetworkInfo;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.os.Bundle;
@@ -31,6 +33,7 @@ import android.widget.ProgressBar;
 import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
+import android.widget.ImageButton;
 
 import androidx.annotation.NonNull;
 import androidx.credentials.Credential;
@@ -59,6 +62,9 @@ import com.google.firebase.firestore.FieldValue;
 import com.google.firebase.firestore.FirebaseFirestore;
 import com.google.firebase.firestore.Query;
 import com.google.firebase.functions.FirebaseFunctions;
+import com.google.firebase.storage.FirebaseStorage;
+import com.google.firebase.storage.StorageReference;
+import com.bumptech.glide.Glide;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -82,6 +88,12 @@ public class MainActivity extends Activity {
     CallbackManager callbackManager;
     final ExecutorService authExecutor = Executors.newSingleThreadExecutor();
     MediaPlayer ambientPlayer;
+    ImageView profileAvatar;
+    static final int REQUEST_PROFILE_PHOTO=1818;
+    float gestureDownX, gestureDownY;
+    long gestureDownAt;
+    String currentRoute="login";
+    AlertDialog offlineDialog;
 
     int dp(float n){return (int)(n*getResources().getDisplayMetrics().density+.5f);}
     TextView tv(String s,float z){TextView t=new TextView(this);t.setText(s);t.setTextSize(z);t.setTextColor(WHITE);t.setPadding(dp(8),dp(6),dp(8),dp(6));return t;}
@@ -92,49 +104,99 @@ public class MainActivity extends Activity {
         sp=getSharedPreferences("mmc",0);
         seed();
         callbackManager=CallbackManager.Factory.create();
-        showSplash();
+        if(isOnline()) showSplash(); else showOfflineScreen();
+    }
+
+    boolean isOnline(){
+        ConnectivityManager cm=(ConnectivityManager)getSystemService(CONNECTIVITY_SERVICE);
+        if(cm==null) return false;
+        NetworkInfo ni=cm.getActiveNetworkInfo();
+        return ni!=null && ni.isConnected();
+    }
+
+    void showOfflineScreen(){
+        currentRoute="offline";
+        LinearLayout box=new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setGravity(Gravity.CENTER);
+        box.setPadding(dp(24),dp(24),dp(24),dp(24));
+        box.setBackgroundColor(BG);
+        ImageView logo=new ImageView(this);
+        logo.setImageResource(R.drawable.mmc_logo_4k);
+        logo.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+        box.addView(logo,new LinearLayout.LayoutParams(-1,dp(190)));
+        TextView title=tv("MMC PONSEL",30); title.setGravity(Gravity.CENTER); title.setTypeface(null,Typeface.BOLD); title.setTextColor(YELLOW); box.addView(title);
+        TextView msg=tv("Koneksi internet diperlukan.
+MMC PONSEL hanya dapat digunakan secara online.",16); msg.setGravity(Gravity.CENTER); msg.setTextColor(MUTED); box.addView(msg);
+        Button retry=btn("↻ Coba Lagi"); box.addView(retry,new LinearLayout.LayoutParams(-1,dp(52)));
+        retry.setOnClickListener(v->{ if(isOnline()) showSplash(); else Toast.makeText(this,"Internet masih belum tersambung.",Toast.LENGTH_SHORT).show(); });
+        setContentView(box);
+    }
+
+    @Override protected void onResume(){
+        super.onResume();
+        if(currentRoute!=null && !"offline".equals(currentRoute) && !isOnline()) showOfflineScreen();
     }
 
     void seed(){ /* Katalog tidak lagi ditanam di APK; semua barang berasal dari Firestore. */ }
 
-    void showSplash(){
-        final LinearLayout splash=new LinearLayout(this);
-        splash.setOrientation(LinearLayout.VERTICAL);
-        splash.setGravity(Gravity.CENTER);
-        splash.setBackgroundColor(BG);
+    void showLoadingScreen(String message, final Runnable next){
+        final LinearLayout box=new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setGravity(Gravity.CENTER);
+        box.setPadding(dp(24),dp(24),dp(24),dp(24));
+        box.setBackgroundColor(BG);
 
-        TextView logo=tv("MMC",52);
-        logo.setGravity(Gravity.CENTER);
-        logo.setTypeface(Typeface.DEFAULT,Typeface.BOLD);
-        logo.setTextColor(YELLOW);
-        TextView brand=tv("PONSEL",28);
+        ImageView hacker=new ImageView(this);
+        hacker.setImageResource(R.drawable.hacker_computer);
+        hacker.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+        box.addView(hacker,new LinearLayout.LayoutParams(-1,dp(230)));
+
+        TextView brand=tv("MMC PONSEL",28);
         brand.setGravity(Gravity.CENTER);
         brand.setTypeface(Typeface.DEFAULT,Typeface.BOLD);
-        TextView sub=tv("Jual • Beli • Service HP",15);
-        sub.setGravity(Gravity.CENTER);
-        sub.setTextColor(MUTED);
+        brand.setTextColor(YELLOW);
+        box.addView(brand,new LinearLayout.LayoutParams(-1,dp(50)));
+
+        TextView msg=tv(message,15);
+        msg.setGravity(Gravity.CENTER);
+        msg.setTextColor(MUTED);
+        box.addView(msg,new LinearLayout.LayoutParams(-1,dp(38)));
+
+        TextView percent=tv("0%",18);
+        percent.setGravity(Gravity.CENTER);
+        percent.setTypeface(Typeface.DEFAULT,Typeface.BOLD);
+        box.addView(percent,new LinearLayout.LayoutParams(-1,dp(42)));
 
         ProgressBar progress=new ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal);
-        progress.setIndeterminate(true);
-        LinearLayout.LayoutParams pp=new LinearLayout.LayoutParams(dp(190),dp(6));
-        pp.topMargin=dp(28);
-        splash.addView(logo,new LinearLayout.LayoutParams(-1,dp(70)));
-        splash.addView(brand,new LinearLayout.LayoutParams(-1,dp(50)));
-        splash.addView(sub,new LinearLayout.LayoutParams(-1,dp(40)));
-        splash.addView(progress,pp);
-        setContentView(splash);
+        progress.setMax(100);
+        progress.setProgress(0);
+        LinearLayout.LayoutParams pp=new LinearLayout.LayoutParams(-1,dp(8));
+        pp.leftMargin=dp(32); pp.rightMargin=dp(32);
+        box.addView(progress,pp);
+        setContentView(box);
 
-        Animation fade=new AlphaAnimation(0f,1f);
-        fade.setDuration(750);
-        fade.setInterpolator(new AccelerateDecelerateInterpolator());
-        logo.startAnimation(fade);
+        final android.os.Handler h=new android.os.Handler();
+        final int[] value={0};
+        Runnable tick=new Runnable(){
+            @Override public void run(){
+                value[0]+=2;
+                if(value[0]>100)value[0]=100;
+                progress.setProgress(value[0]);
+                percent.setText(value[0]+"%");
+                if(value[0]<100) h.postDelayed(this,28);
+                else h.postDelayed(next,220);
+            }
+        };
+        h.post(tick);
+    }
 
-        ScaleAnimation scale=new ScaleAnimation(0.82f,1f,0.82f,1f,Animation.RELATIVE_TO_SELF,.5f,Animation.RELATIVE_TO_SELF,.5f);
-        scale.setDuration(850);
-        scale.setInterpolator(new AccelerateDecelerateInterpolator());
-        brand.startAnimation(scale);
+    void showLoginSuccessLoading(final Runnable next){
+        showLoadingScreen("Login berhasil • menyiapkan aplikasi...",next);
+    }
 
-        new android.os.Handler().postDelayed(() -> {
+    void showSplash(){
+        showLoadingScreen("Memuat MMC PONSEL...", () -> {
             try {
                 auth=FirebaseAuth.getInstance();
                 db=FirebaseFirestore.getInstance();
@@ -143,10 +205,11 @@ public class MainActivity extends Activity {
             } catch(Exception e) {
                 showLogin();
             }
-        },1800);
+        });
     }
 
     void base(String heading){
+        currentRoute=routeForHeading(heading);
         root=new android.widget.FrameLayout(this);
         root.setBackgroundColor(BG);
         AnimatedBackgroundView animated=new AnimatedBackgroundView(this);
@@ -174,6 +237,56 @@ public class MainActivity extends Activity {
         title.animate().alpha(1f).setDuration(500).start();
     }
 
+    String routeForHeading(String heading){
+        if(heading==null) return "page";
+        String h=heading.toLowerCase();
+        if(h.contains("login")) return "login";
+        if(h.contains("kategori") || h.contains("produk")) return "products";
+        if(h.contains("service")) return "service";
+        if(h.contains("profil")) return "profile";
+        if(h.contains("mmc ponsel")) return "home";
+        if(h.contains("admin")) return "admin";
+        return "page";
+    }
+
+    void navigateBack(){
+        if("login".equals(currentRoute)) return;
+        home();
+    }
+
+    void navigateNextMenu(){
+        if("login".equals(currentRoute)) return;
+        if("home".equals(currentRoute)) category();
+        else if("products".equals(currentRoute)) service();
+        else if("service".equals(currentRoute)) profile();
+        else home();
+    }
+
+    @Override public boolean dispatchTouchEvent(android.view.MotionEvent event){
+        switch(event.getActionMasked()){
+            case android.view.MotionEvent.ACTION_DOWN:
+                gestureDownX=event.getRawX(); gestureDownY=event.getRawY(); gestureDownAt=System.currentTimeMillis();
+                break;
+            case android.view.MotionEvent.ACTION_UP:
+                float dx=event.getRawX()-gestureDownX, dy=event.getRawY()-gestureDownY;
+                long dt=Math.max(1,System.currentTimeMillis()-gestureDownAt);
+                if(Math.abs(dx)>dp(110) && Math.abs(dx)>Math.abs(dy)*1.25f && dt<900){
+                    if(dx>0) navigateBack(); else navigateNextMenu();
+                    return true;
+                }
+                break;
+        }
+        return super.dispatchTouchEvent(event);
+    }
+
+    @Override public void onBackPressed(){
+        if("home".equals(currentRoute) || "login".equals(currentRoute)){
+            super.onBackPressed();
+        } else {
+            home();
+        }
+    }
+
     void topMenu(){
         LinearLayout nav=new LinearLayout(this);
         nav.setOrientation(LinearLayout.HORIZONTAL);
@@ -197,93 +310,192 @@ public class MainActivity extends Activity {
     }
 
     void showLogin(){
-        base("📱 MMC PONSEL");
+        base("MMC PONSEL • Login");
         startAmbientSound();
-        TextView sub=tv("JUAL • BELI • SERVICE HP\nBaru • Bekas • Rusak",18);
-        sub.setTextColor(YELLOW); content.addView(sub);
 
-        EditText email=field("Email");
+        ImageView hackerLogo=new ImageView(this);
+        hackerLogo.setImageResource(R.drawable.mmc_logo_4k);
+        hackerLogo.setContentDescription("Logo hacker MMC PONSEL");
+        hackerLogo.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+        LinearLayout.LayoutParams logoLp=new LinearLayout.LayoutParams(-1,dp(175));
+        logoLp.gravity=Gravity.CENTER_HORIZONTAL;
+        logoLp.bottomMargin=dp(4);
+        content.addView(hackerLogo,logoLp);
+
+        TextView brand=tv("MMC PONSEL",26);
+        brand.setGravity(Gravity.CENTER);
+        brand.setTypeface(Typeface.DEFAULT,Typeface.BOLD);
+        brand.setTextColor(YELLOW);
+        content.addView(brand,new LinearLayout.LayoutParams(-1,dp(42)));
+
+        TextView sub=tv("Jual • Beli • Service HP",14);
+        sub.setGravity(Gravity.CENTER);
+        sub.setTextColor(MUTED);
+        content.addView(sub,new LinearLayout.LayoutParams(-1,dp(34)));
+
+        EditText username=field("Username");
         EditText pass=field("Password");
         pass.setInputType(android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD);
-        content.addView(email); content.addView(pass);
+        content.addView(username); content.addView(pass);
+
+        Button register=btn("📝 Daftar Akun Baru");
+        register.setTextColor(WHITE); register.setBackgroundResource(R.drawable.card);
+        content.addView(register);
 
         Button login=btn("🔐 Login");
         content.addView(login);
-        Button register=btn("📝 Daftar Akun Baru");
-        register.setTextColor(WHITE); register.setBackgroundResource(R.drawable.card); content.addView(register);
+
         Button forgot=btn("🔑 Lupa Password");
-        forgot.setTextColor(WHITE); forgot.setBackgroundResource(R.drawable.card); content.addView(forgot);
+        forgot.setTextColor(WHITE); forgot.setBackgroundResource(R.drawable.card);
+        content.addView(forgot);
 
-        Button google=btn("🔵 Lanjut dengan Google");
-        google.setTextColor(WHITE); google.setBackgroundResource(R.drawable.card); content.addView(google);
-        Button facebook=btn("🔷 Lanjut dengan Facebook");
-        facebook.setTextColor(WHITE); facebook.setBackgroundResource(R.drawable.card); content.addView(facebook);
-
-        TextView note=tv("Akun tersimpan aman melalui Firebase Authentication. Produk yang dipublikasikan dapat dilihat pengguna lain.",13);
-        note.setTextColor(MUTED); content.addView(note);
+        TextView note=tv("Login menggunakan username dan password.\nAkun admin: username miss • password miss11",13);
+        note.setGravity(Gravity.CENTER);
+        note.setTextColor(MUTED);
+        content.addView(note);
         addDeveloperCard();
 
-        login.setOnClickListener(v->{
-            String e=email.getText().toString().trim();
-            String p=pass.getText().toString();
-            if(e.isEmpty()||p.isEmpty()){Toast.makeText(this,"Email dan password wajib diisi",Toast.LENGTH_LONG).show();return;}
-            if(!firebaseReady())return;
-            auth.signInWithEmailAndPassword(e,p).addOnCompleteListener(this,t->{
-                if(t.isSuccessful()) checkUserStatusAndLogin(auth.getCurrentUser());
-                else Toast.makeText(this,"Login gagal: "+(t.getException()==null?"periksa akun":t.getException().getMessage()),Toast.LENGTH_LONG).show();
-            });
-        });
         register.setOnClickListener(v->registerAccount());
         forgot.setOnClickListener(v->forgotPassword());
-        google.setOnClickListener(v->signInWithGoogle());
-        facebook.setOnClickListener(v->signInWithFacebook());
-        Button admin=btn("🛠 Login Admin");
-        admin.setTextColor(WHITE); admin.setBackgroundResource(R.drawable.card); content.addView(admin);
-        admin.setOnClickListener(v->showAdminLogin());
+        login.setOnClickListener(v->loginWithUsername(username.getText().toString(),pass.getText().toString()));
+    }
+
+    void loginWithUsername(String rawUsername,String password){
+        String username=rawUsername==null?"":rawUsername.trim().toLowerCase();
+        String pw=password==null?"":password;
+        if(username.isEmpty()||pw.isEmpty()){
+            Toast.makeText(this,"Username dan password wajib diisi",Toast.LENGTH_LONG).show(); return;
+        }
+        if(!firebaseReady()) return;
+
+        // Akun admin tetap divalidasi melalui Firebase Authentication.
+        if("miss".equals(username)){
+            if(!"miss11".equals(pw)){
+                Toast.makeText(this,"Username atau password admin salah",Toast.LENGTH_LONG).show(); return;
+            }
+            loginAdminFixedCredentials();
+            return;
+        }
+
+        // Username pengguna dicari di Firestore, lalu email akun dipakai untuk Firebase Auth.
+        db.collection("users").whereEqualTo("username",username).limit(1).get()
+                .addOnSuccessListener(snap->{
+                    if(snap.isEmpty()){
+                        Toast.makeText(this,"Username tidak ditemukan. Silakan daftar akun terlebih dahulu.",Toast.LENGTH_LONG).show();
+                        return;
+                    }
+                    String email=snap.getDocuments().get(0).getString("email");
+                    if(email==null||email.trim().isEmpty()){
+                        Toast.makeText(this,"Data akun tidak lengkap. Silakan daftar ulang.",Toast.LENGTH_LONG).show(); return;
+                    }
+                    auth.signInWithEmailAndPassword(email,pw).addOnCompleteListener(this,t->{
+                        if(t.isSuccessful()) checkUserStatusAndLogin(auth.getCurrentUser());
+                        else Toast.makeText(this,"Login gagal: username/password tidak cocok.",Toast.LENGTH_LONG).show();
+                    });
+                })
+                .addOnFailureListener(e->Toast.makeText(this,"Gagal memeriksa akun: "+e.getMessage(),Toast.LENGTH_LONG).show());
+    }
+
+    void loginAdminFixedCredentials(){
+        final String adminEmail="miss@mmcponsel.app";
+        auth.signInWithEmailAndPassword(adminEmail,"miss11").addOnCompleteListener(this,t->{
+            if(t.isSuccessful()){
+                activateAdminRole();
+                return;
+            }
+            // Membuat akun owner hanya jika akun admin belum pernah dibuat.
+            auth.createUserWithEmailAndPassword(adminEmail,"miss11").addOnCompleteListener(this,create->{
+                if(create.isSuccessful()) activateAdminRole();
+                else Toast.makeText(this,"Login admin gagal. Pastikan Firebase Email/Password aktif dan akun admin belum menggunakan password lain.",Toast.LENGTH_LONG).show();
+            });
+        });
+    }
+
+    void activateAdminRole(){
+        FirebaseFunctions.getInstance().getHttpsCallable("ensureAdminRole").call()
+                .addOnSuccessListener(x->{
+                    adminMode=true; memberMode=false;
+                    sp.edit().putString("role","admin").putString("name","Admin MMC PONSEL").apply();
+                    Toast.makeText(this,"Login admin berhasil",Toast.LENGTH_SHORT).show();
+                    showLoginSuccessLoading(() -> adminPanel());
+                })
+                .addOnFailureListener(e->Toast.makeText(this,"Hak admin belum aktif: "+e.getMessage(),Toast.LENGTH_LONG).show());
     }
 
     void registerAccount(){
         base("📝 Daftar Akun MMC PONSEL");
+        ImageView hackerLogo=new ImageView(this);
+        hackerLogo.setImageResource(R.drawable.mmc_logo_4k);
+        hackerLogo.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+        content.addView(hackerLogo,new LinearLayout.LayoutParams(-1,dp(150)));
         EditText name=field("Nama lengkap");
+        EditText username=field("Username unik");
         EditText email=field("Email aktif");
         EditText pass=field("Password minimal 6 karakter");
         EditText confirm=field("Ulangi password");
         pass.setInputType(129); confirm.setInputType(129);
-        content.addView(name); content.addView(email); content.addView(pass); content.addView(confirm);
+        content.addView(name); content.addView(username); content.addView(email); content.addView(pass); content.addView(confirm);
         Button create=btn("Buat Akun"); content.addView(create);
         Button back=btn("Kembali Login"); back.setTextColor(WHITE); back.setBackgroundResource(R.drawable.card); content.addView(back);
         create.setOnClickListener(v->{
-            String n=name.getText().toString().trim(), e=email.getText().toString().trim(), p=pass.getText().toString(), c=confirm.getText().toString();
-            if(n.isEmpty()||e.isEmpty()||p.length()<6||!p.equals(c)){Toast.makeText(this,"Lengkapi data dan pastikan password sama (min. 6 karakter)",Toast.LENGTH_LONG).show();return;}
+            String n=name.getText().toString().trim();
+            String un=username.getText().toString().trim().toLowerCase();
+            String e=email.getText().toString().trim();
+            String p=pass.getText().toString();
+            String c=confirm.getText().toString();
+            if(n.isEmpty()||un.isEmpty()||e.isEmpty()||p.length()<6||!p.equals(c)){
+                Toast.makeText(this,"Lengkapi data, username, dan password minimal 6 karakter.",Toast.LENGTH_LONG).show(); return;
+            }
+            if("miss".equals(un)){
+                Toast.makeText(this,"Username miss khusus untuk admin.",Toast.LENGTH_LONG).show(); return;
+            }
             if(!firebaseReady())return;
-            auth.createUserWithEmailAndPassword(e,p).addOnCompleteListener(this,t->{
-                if(!t.isSuccessful()){Toast.makeText(this,"Pendaftaran gagal: "+t.getException().getMessage(),Toast.LENGTH_LONG).show();return;}
-                FirebaseUser u=auth.getCurrentUser();
-                java.util.HashMap<String,Object> data=new java.util.HashMap<>();
-                data.put("uid",u.getUid()); data.put("name",n); data.put("email",e); data.put("role","user"); data.put("blocked",false); data.put("createdAt",FieldValue.serverTimestamp());
-                db.collection("users").document(u.getUid()).set(data).addOnCompleteListener(x->{
-                    Toast.makeText(this,"Akun berhasil dibuat",Toast.LENGTH_SHORT).show();
-                    checkUserStatusAndLogin(u);
+            db.collection("users").whereEqualTo("username",un).limit(1).get().addOnSuccessListener(existing->{
+                if(!existing.isEmpty()){
+                    Toast.makeText(this,"Username sudah digunakan.",Toast.LENGTH_LONG).show(); return;
+                }
+                auth.createUserWithEmailAndPassword(e,p).addOnCompleteListener(this,t->{
+                    if(!t.isSuccessful()){Toast.makeText(this,"Pendaftaran gagal: "+t.getException().getMessage(),Toast.LENGTH_LONG).show();return;}
+                    FirebaseUser u=auth.getCurrentUser();
+                    java.util.HashMap<String,Object> data=new java.util.HashMap<>();
+                    data.put("uid",u.getUid()); data.put("name",n); data.put("username",un); data.put("email",e); data.put("role","user"); data.put("blocked",false); data.put("createdAt",FieldValue.serverTimestamp());
+                    db.collection("users").document(u.getUid()).set(data).addOnCompleteListener(x->{
+                        Toast.makeText(this,"Akun berhasil dibuat. Silakan masuk dengan username Anda.",Toast.LENGTH_LONG).show();
+                        auth.signOut(); showLogin();
+                    });
                 });
-            });
+            }).addOnFailureListener(e1->Toast.makeText(this,"Gagal memeriksa username: "+e1.getMessage(),Toast.LENGTH_LONG).show());
         });
         back.setOnClickListener(v->showLogin());
     }
 
     void forgotPassword(){
         base("🔑 Lupa Password");
-        EditText email=field("Masukkan email akun");
-        content.addView(email);
+        EditText account=field("Username atau email akun");
+        content.addView(account);
         Button send=btn("Kirim Link Reset Password"); content.addView(send);
         Button back=btn("Kembali Login"); back.setTextColor(WHITE); back.setBackgroundResource(R.drawable.card); content.addView(back);
         send.setOnClickListener(v->{
-            String e=email.getText().toString().trim();
-            if(e.isEmpty()){Toast.makeText(this,"Masukkan email terlebih dahulu",Toast.LENGTH_LONG).show();return;}
+            String value=account.getText().toString().trim().toLowerCase();
+            if(value.isEmpty()){Toast.makeText(this,"Masukkan username atau email terlebih dahulu",Toast.LENGTH_LONG).show();return;}
             if(!firebaseReady())return;
-            auth.sendPasswordResetEmail(e).addOnCompleteListener(this,t->Toast.makeText(this,
-                    t.isSuccessful()?"Link reset password sudah dikirim ke email.":"Gagal mengirim reset: "+t.getException().getMessage(),Toast.LENGTH_LONG).show());
+            if(value.contains("@")){
+                sendResetEmail(value);
+            }else{
+                db.collection("users").whereEqualTo("username",value).limit(1).get().addOnSuccessListener(s->{
+                    if(s.isEmpty()){Toast.makeText(this,"Username tidak ditemukan.",Toast.LENGTH_LONG).show();return;}
+                    String email=s.getDocuments().get(0).getString("email");
+                    if(email==null){Toast.makeText(this,"Email akun tidak tersedia.",Toast.LENGTH_LONG).show();return;}
+                    sendResetEmail(email);
+                }).addOnFailureListener(e->Toast.makeText(this,"Gagal mencari akun: "+e.getMessage(),Toast.LENGTH_LONG).show());
+            }
         });
         back.setOnClickListener(v->showLogin());
+    }
+
+    void sendResetEmail(String email){
+        auth.sendPasswordResetEmail(email).addOnCompleteListener(this,t->Toast.makeText(this,
+                t.isSuccessful()?"Link reset password sudah dikirim ke email.":"Gagal mengirim reset: "+t.getException().getMessage(),Toast.LENGTH_LONG).show());
     }
 
     void checkUserStatusAndLogin(FirebaseUser user){
@@ -316,7 +528,7 @@ public class MainActivity extends Activity {
             auth.signInWithEmailAndPassword("miss@mmcponsel.app",pw).addOnCompleteListener(this,t->{
                 if(!t.isSuccessful()){Toast.makeText(this,"Login admin gagal. Buat akun admin Firebase dan aktifkan Email/Password.",Toast.LENGTH_LONG).show();return;}
                 FirebaseFunctions.getInstance().getHttpsCallable("ensureAdminRole").call()
-                        .addOnSuccessListener(x->{adminMode=true;memberMode=false;Toast.makeText(this,"Login admin berhasil",Toast.LENGTH_SHORT).show();adminPanel();})
+                        .addOnSuccessListener(x->{adminMode=true;memberMode=false;Toast.makeText(this,"Login admin berhasil",Toast.LENGTH_SHORT).show();showLoginSuccessLoading(() -> adminPanel());})
                         .addOnFailureListener(e->Toast.makeText(this,"Akun ini belum memiliki hak admin: "+e.getMessage(),Toast.LENGTH_LONG).show());
             });
         });
@@ -465,18 +677,45 @@ public class MainActivity extends Activity {
             sp.edit().putString("user",user.getEmail()==null?user.getUid():user.getEmail())
                     .putString("name",name).putString("uid",user.getUid()).apply();
             Toast.makeText(this,"Login berhasil",Toast.LENGTH_SHORT).show();
-            home();
+            showLoginSuccessLoading(() -> home());
         }).addOnFailureListener(e->{
             sp.edit().putString("user",user.getEmail()==null?user.getUid():user.getEmail())
                     .putString("name",user.getDisplayName()==null?"Pelanggan":user.getDisplayName())
                     .putString("uid",user.getUid()).apply();
-            home();
+            showLoginSuccessLoading(() -> home());
         });
     }
 
     @Override protected void onActivityResult(int requestCode,int resultCode,Intent data){
         super.onActivityResult(requestCode,resultCode,data);
         if(callbackManager!=null) callbackManager.onActivityResult(requestCode,resultCode,data);
+        if(requestCode==REQUEST_PROFILE_PHOTO && resultCode==RESULT_OK && data!=null && data.getData()!=null){
+            uploadProfilePhoto(data.getData());
+        }
+    }
+
+    void chooseProfilePhoto(){
+        Intent pick=new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        pick.addCategory(Intent.CATEGORY_OPENABLE);
+        pick.setType("image/*");
+        startActivityForResult(pick,REQUEST_PROFILE_PHOTO);
+    }
+
+    void uploadProfilePhoto(Uri uri){
+        FirebaseUser u=auth==null?null:auth.getCurrentUser();
+        if(u==null){showLogin();return;}
+        if(db==null)db=FirebaseFirestore.getInstance();
+        StorageReference ref=FirebaseStorage.getInstance().getReference().child("profilePhotos").child(u.getUid()).child("profile.jpg");
+        Toast.makeText(this,"Mengunggah foto profil...",Toast.LENGTH_SHORT).show();
+        ref.putFile(uri).continueWithTask(task->{
+            if(!task.isSuccessful() && task.getException()!=null) throw task.getException();
+            return ref.getDownloadUrl();
+        }).addOnSuccessListener(url->{
+            db.collection("users").document(u.getUid()).set(new java.util.HashMap<String,Object>(){{put("photoUrl",url.toString());put("updatedAt",FieldValue.serverTimestamp());}},com.google.firebase.firestore.SetOptions.merge());
+            sp.edit().putString("photoUrl",url.toString()).apply();
+            if(profileAvatar!=null) Glide.with(this).load(url).placeholder(R.drawable.mmc_logo_4k).circleCrop().into(profileAvatar);
+            Toast.makeText(this,"Foto profil berhasil diperbarui",Toast.LENGTH_LONG).show();
+        }).addOnFailureListener(e->Toast.makeText(this,"Gagal upload foto: "+e.getMessage(),Toast.LENGTH_LONG).show());
     }
 
     // ===== Store UI =====
@@ -506,7 +745,8 @@ public class MainActivity extends Activity {
                         String q=search.getText().toString().trim().toLowerCase();
                         for(DocumentSnapshot d:snapshot.getDocuments()){
                             String n=d.getString("name"); String price=d.getString("price"); String condition=d.getString("condition"); String rating=d.getString("rating");
-                            if(n==null) continue;
+                            String status=d.getString("status");
+                            if(n==null || (status!=null && !"published".equals(status))) continue;
                             if(q.isEmpty() || n.toLowerCase().contains(q) || (condition!=null && condition.toLowerCase().contains(q))){
                                 String[] row=new String[]{n,price==null?"":price,condition==null?"":condition,rating==null?"0.0":rating};
                                 products.add(row); productCard(row, productList);
@@ -614,28 +854,76 @@ public class MainActivity extends Activity {
     void category(){base("Kategori HP");loadCategoryFromServer();}
     void loadCategoryFromServer(){
         if(db==null)db=FirebaseFirestore.getInstance();
-        db.collection("products").orderBy("createdAt",Query.Direction.DESCENDING).get().addOnSuccessListener(snapshot->{
-            if(snapshot.isEmpty()){content.addView(tv("Belum ada produk online.",16));return;}
-            for(DocumentSnapshot d:snapshot.getDocuments()){String n=d.getString("name"),p=d.getString("price"),c=d.getString("condition"),r=d.getString("rating");if(n!=null)productCard(new String[]{n,p==null?"":p,c==null?"":c,r==null?"0.0":r});}
-        }).addOnFailureListener(e->content.addView(tv("Katalog online gagal dimuat: "+e.getMessage(),14)));
+        db.collection("products").orderBy("createdAt",Query.Direction.DESCENDING)
+                .addSnapshotListener((snapshot,error)->{
+                    if(error!=null){content.addView(tv("Katalog online gagal dimuat: "+error.getMessage(),14));return;}
+                    if(content==null)return;
+                    // Keep a single live catalog container so every new product appears automatically.
+                    LinearLayout liveList=new LinearLayout(this); liveList.setOrientation(LinearLayout.VERTICAL);
+                    content.addView(tv("● KATALOG ONLINE — diperbarui otomatis",14));
+                    content.addView(liveList);
+                    if(snapshot==null || snapshot.isEmpty()){liveList.addView(tv("Belum ada produk online.",16));return;}
+                    for(DocumentSnapshot d:snapshot.getDocuments()){
+                        String n=d.getString("name"),p=d.getString("price"),c=d.getString("condition"),r=d.getString("rating"),status=d.getString("status");
+                        if(n!=null && (status==null || "published".equals(status)))productCard(new String[]{n,p==null?"":p,c==null?"":c,r==null?"0.0":r},liveList);
+                    }
+                });
     }
     void service(){base("Service HP — Online");content.addView(tv("Form service tersimpan langsung ke server MMC PONSEL",22));for(String s:new String[]{"Layar Pecah / Touchscreen","Ganti Baterai","Tidak Bisa Dinyalakan","Kamera","Water Damage","Software / Unlock","Lainnya"}){Button b=btn(s);content.addView(b);b.setOnClickListener(v->serviceForm(s));}}
     void serviceForm(String type){base("Pesan Service Online");content.addView(tv("Jenis: "+type,20));EditText note=field("Keluhan / catatan");content.addView(note);EditText phone=field("Nomor HP");content.addView(phone);Button b=btn("Kirim Permintaan ke Server");content.addView(b);b.setOnClickListener(v->{FirebaseUser u=auth==null?null:auth.getCurrentUser();if(u==null){showLogin();return;}if(phone.length()==0){Toast.makeText(this,"Masukkan nomor HP",0).show();return;}java.util.HashMap<String,Object> data=new java.util.HashMap<>();data.put("uid",u.getUid());data.put("userName",u.getDisplayName()==null?"Pelanggan":u.getDisplayName());data.put("email",u.getEmail());data.put("type",type);data.put("note",note.getText().toString().trim());data.put("phone",phone.getText().toString().trim());data.put("status","Menunggu Diproses");data.put("createdAt",FieldValue.serverTimestamp());db.collection("serviceRequests").add(data).addOnSuccessListener(x->{Toast.makeText(this,"Permintaan service terkirim online",Toast.LENGTH_LONG).show();transactions();}).addOnFailureListener(e->Toast.makeText(this,"Gagal: "+e.getMessage(),Toast.LENGTH_LONG).show());});}
     void sell(){base("Jual HP Online");EditText category=field("Kategori");EditText brand=field("Merek");EditText model=field("Model");EditText condition=field("Kondisi");EditText price=field("Harga yang diinginkan");EditText phone=field("Nomor kontak");for(EditText e:new EditText[]{category,brand,model,condition,price,phone})content.addView(e);Button b=btn("Kirim Penawaran ke Server");content.addView(b);b.setOnClickListener(v->{FirebaseUser u=auth==null?null:auth.getCurrentUser();if(u==null){showLogin();return;}if(model.length()==0||phone.length()==0){Toast.makeText(this,"Model dan nomor kontak wajib diisi",0).show();return;}java.util.HashMap<String,Object> data=new java.util.HashMap<>();data.put("uid",u.getUid());data.put("userName",u.getDisplayName()==null?"Pelanggan":u.getDisplayName());data.put("email",u.getEmail());data.put("category",category.getText().toString().trim());data.put("brand",brand.getText().toString().trim());data.put("model",model.getText().toString().trim());data.put("condition",condition.getText().toString().trim());data.put("desiredPrice",price.getText().toString().trim());data.put("phone",phone.getText().toString().trim());data.put("status","Menunggu Ditinjau");data.put("createdAt",FieldValue.serverTimestamp());db.collection("sellRequests").add(data).addOnSuccessListener(x->{Toast.makeText(this,"Penawaran terkirim online",Toast.LENGTH_LONG).show();transactions();}).addOnFailureListener(e->Toast.makeText(this,"Gagal: "+e.getMessage(),Toast.LENGTH_LONG).show());});}
     void bottom(){LinearLayout nav=new LinearLayout(this);nav.setGravity(Gravity.CENTER);String[] a={"⌂ Beranda","🛒 Beli","🔧 Service","👤 Profil"};for(String s:a){Button b=btn(s);b.setTextColor(WHITE);b.setBackgroundColor(Color.TRANSPARENT);nav.addView(b,new LinearLayout.LayoutParams(0,dp(58),1));if(s.contains("Service"))b.setOnClickListener(v->service());if(s.contains("Profil"))b.setOnClickListener(v->profile());if(s.contains("Beli"))b.setOnClickListener(v->category());if(s.contains("Beranda"))b.setOnClickListener(v->home());}mainColumn.addView(nav);}
     void profile(){
-        base("👤 Profil Saya");
+        base(adminMode?"🛡 Profil Admin MMC PONSEL":"👤 Profil Saya");
         FirebaseUser u=auth==null?null:auth.getCurrentUser();
         if(u==null){showLogin();return;}
-        content.addView(tv((u.getDisplayName()==null?"Pelanggan":u.getDisplayName())+"\n"+(u.getEmail()==null?"":u.getEmail()),20));
+
+        LinearLayout identity=new LinearLayout(this);
+        identity.setOrientation(LinearLayout.VERTICAL);
+        identity.setGravity(Gravity.CENTER_HORIZONTAL);
+        identity.setPadding(dp(12),dp(12),dp(12),dp(14));
+        identity.setBackgroundResource(R.drawable.card);
+
+        profileAvatar=new ImageView(this);
+        profileAvatar.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        LinearLayout.LayoutParams avatarLp=new LinearLayout.LayoutParams(dp(136),dp(136));
+        identity.addView(profileAvatar,avatarLp);
+        String cachedPhoto=sp.getString("photoUrl","");
+        if(cachedPhoto.length()>0) Glide.with(this).load(cachedPhoto).placeholder(R.drawable.mmc_logo_4k).circleCrop().into(profileAvatar);
+        else profileAvatar.setImageResource(R.drawable.mmc_logo_4k);
+
+        TextView name=tv(u.getDisplayName()==null?sp.getString("name","Pelanggan"):u.getDisplayName(),20);
+        name.setGravity(Gravity.CENTER); name.setTypeface(null,Typeface.BOLD); identity.addView(name);
+        TextView email=tv(u.getEmail()==null?"":u.getEmail(),14); email.setGravity(Gravity.CENTER); email.setTextColor(MUTED); identity.addView(email);
+        TextView role=tv(adminMode?"🛡 ADMIN • Kontrol penuh pengguna & produk":"👤 MEMBER • Akses pengguna biasa",14);
+        role.setGravity(Gravity.CENTER); role.setTextColor(adminMode?YELLOW:GREEN); role.setTypeface(null,Typeface.BOLD); identity.addView(role);
+        content.addView(identity);
+
+        Button photo=btn("📷 Ganti Foto Profil"); content.addView(photo); photo.setOnClickListener(v->chooseProfilePhoto());
         Button add=btn("➕ Tambah Barang / Jual HP"); content.addView(add); add.setOnClickListener(v->profileAddProduct());
         Button change=btn("🔐 Ubah Password"); content.addView(change); change.setOnClickListener(v->changePassword());
         Button account=btn("💾 Data Akun Online"); content.addView(account); account.setOnClickListener(v->saveProfileOnline());
         Button tx=btn("🧾 Transaksi Saya"); content.addView(tx); tx.setOnClickListener(v->transactions());
         Button chat=btn("💬 Chat Admin MMC PONSEL"); content.addView(chat); chat.setOnClickListener(v->chatWithAdmin());
+        Button globalChat=btn("🌐 Chat Global — Semua Pengguna"); content.addView(globalChat); globalChat.setOnClickListener(v->solutionGroup());
+        if(adminMode){
+            TextView adminNote=tv("🛡 MODE ADMIN\nGunakan panel admin untuk mengelola pengguna, blokir akun, dan menghapus produk.",15);
+            adminNote.setTextColor(YELLOW); adminNote.setBackgroundResource(R.drawable.card); content.addView(adminNote);
+            Button manage=btn("🛡 Buka Panel Admin"); content.addView(manage); manage.setOnClickListener(v->adminPanel());
+        }else{
+            Button member=btn("👤 Pusat Member"); content.addView(member); member.setOnClickListener(v->memberPanel());
+        }
         Button dev=btn("👨‍💻 Developer / Pencipta — Miss Cell"); content.addView(dev); dev.setOnClickListener(v->developerPage());
         Button wa=btn("Chat WhatsApp MMC PONSEL"); content.addView(wa); wa.setOnClickListener(v->openWhatsApp());
-        Button out=btn("Logout"); content.addView(out); out.setOnClickListener(v->logout());
+        Button out=btn(adminMode?"Logout Admin":"Logout"); content.addView(out); out.setOnClickListener(v->logout());
+
+        db.collection("users").document(u.getUid()).get().addOnSuccessListener(d->{
+            String photoUrl=d.getString("photoUrl");
+            if(photoUrl!=null && !photoUrl.isEmpty()){
+                sp.edit().putString("photoUrl",photoUrl).apply();
+                if(profileAvatar!=null) Glide.with(this).load(photoUrl).placeholder(R.drawable.mmc_logo_4k).circleCrop().into(profileAvatar);
+            }
+        });
     }
 
     void changePassword(){
@@ -677,7 +965,7 @@ public class MainActivity extends Activity {
             d.put("description",description.getText().toString().trim()); d.put("rating","0.0");
             d.put("ownerUid",u.getUid()); d.put("ownerName",u.getDisplayName()==null?"Pengguna":u.getDisplayName());
             d.put("createdAt",FieldValue.serverTimestamp()); d.put("status","published");
-            db.collection("products").add(d).addOnSuccessListener(x->{Toast.makeText(this,"Barang berhasil dipublikasikan dan tampil di Produk.",Toast.LENGTH_LONG).show();home();})
+            db.collection("products").add(d).addOnSuccessListener(x->{Toast.makeText(this,"Barang online berhasil dipublikasikan. Pengguna lain dapat melihatnya otomatis di Produk.",Toast.LENGTH_LONG).show();category();})
               .addOnFailureListener(e->Toast.makeText(this,"Gagal mempublikasikan: "+e.getMessage(),Toast.LENGTH_LONG).show());
         });
     }
@@ -694,21 +982,25 @@ public class MainActivity extends Activity {
     void logout(){try{if(auth!=null)auth.signOut();LoginManager.getInstance().logOut();}catch(Exception ignored){}adminMode=false;memberMode=false;sp.edit().clear().apply();showLogin();}
 
     void memberPanel(){
-        base("👥 Member MMC PONSEL");
-        content.addView(tv("Login sebagai member • Kelola chat dan gunakan Tambah Barang melalui Profil",16));
-        Button chats=btn("💬 Balas Chat Pengguna"); content.addView(chats); chats.setOnClickListener(v->adminChats());
+        base("👤 Area Member MMC PONSEL");
+        TextView badge=tv("MEMBER • Pengguna Biasa",18); badge.setTextColor(GREEN); badge.setTypeface(null,Typeface.BOLD); badge.setBackgroundResource(R.drawable.card); content.addView(badge);
+        content.addView(tv("Akses member: lihat katalog, tambah barang melalui Profil, service, transaksi, dan chat.",15));
+        Button chats=btn("💬 Chat Admin MMC PONSEL"); content.addView(chats); chats.setOnClickListener(v->chatWithAdmin());
         Button group=btn("👥 Grup Solusi Admin & Member"); content.addView(group); group.setOnClickListener(v->solutionGroup());
+        Button prof=btn("👤 Kembali ke Profil"); content.addView(prof); prof.setOnClickListener(v->profile());
         Button out=btn("Logout Member"); out.setTextColor(WHITE); out.setBackgroundResource(R.drawable.card); content.addView(out); out.setOnClickListener(v->logout());
     }
 
     // ===== Admin =====
     void adminPanel(){
-        base("🛠 Admin MMC PONSEL");
-        content.addView(tv("Kontrol pusat • pengguna • produk • chat • Tambah Barang tersedia melalui Profil",16));
-        Button users=btn("👥 Kelola Pengguna"); content.addView(users); users.setOnClickListener(v->adminUsers());
-        Button productsBtn=btn("📦 Kelola Produk"); content.addView(productsBtn); productsBtn.setOnClickListener(v->adminProducts());
+        base("🛡 ADMIN MMC PONSEL");
+        TextView badge=tv("ADMIN • Kontrol Penuh",18); badge.setTextColor(YELLOW); badge.setTypeface(null,Typeface.BOLD); badge.setBackgroundResource(R.drawable.card); content.addView(badge);
+        content.addView(tv("Panel khusus admin. Kelola pengguna, blokir akun, hapus pengguna, dan moderasi produk.",15));
+        Button users=btn("🛡 Kelola Pengguna"); content.addView(users); users.setOnClickListener(v->adminUsers());
+        Button productsBtn=btn("📦 Kelola & Hapus Produk"); content.addView(productsBtn); productsBtn.setOnClickListener(v->adminProducts());
         Button chats=btn("💬 Chat Pengguna"); content.addView(chats); chats.setOnClickListener(v->adminChats());
         Button group=btn("👥 Grup Solusi Admin & Member"); content.addView(group); group.setOnClickListener(v->solutionGroup());
+        Button prof=btn("👤 Profil Admin"); content.addView(prof); prof.setOnClickListener(v->profile());
         Button out=btn("Logout Admin"); content.addView(out); out.setOnClickListener(v->logout());
     }
 
@@ -791,12 +1083,10 @@ public class MainActivity extends Activity {
     }
 
     void solutionGroup(){
-        if(!adminMode && !memberMode){
-            Toast.makeText(this,"Grup khusus Admin & Member",Toast.LENGTH_LONG).show();
-            return;
-        }
-        base("👥 Grup Solusi MMC PONSEL");
-        TextView info=tv("Ruang khusus Admin & Member untuk bertukar solusi, pengalaman service, ide jual beli, dan membantu perkembangan MMC PONSEL. Semua anggota grup dapat membaca dan membalas pesan.",14);
+        FirebaseUser currentUser=auth==null?null:auth.getCurrentUser();
+        if(currentUser==null){ showLogin(); return; }
+        base("🌐 Chat Global MMC PONSEL");
+        TextView info=tv("Chat global untuk semua pengguna MMC PONSEL. Semua pengguna yang sudah login dapat membaca dan mengirim pesan secara online.",14);
         info.setTextColor(MUTED); content.addView(info);
 
         LinearLayout messages=new LinearLayout(this); messages.setOrientation(LinearLayout.VERTICAL);
@@ -823,7 +1113,8 @@ public class MainActivity extends Activity {
                             String role=d.getString("role");
                             String name=d.getString("name");
                             String text=d.getString("text");
-                            TextView m=tv(("admin".equals(role)?"🛠 Admin":"👥 Member")+" • "+(name==null?"Anggota":name)+"\n"+(text==null?"":text),15);
+                            String badge="admin".equals(role)?"🛡 Admin":"👤 Member";
+                            TextView m=tv(badge+" • "+(name==null?"Pengguna":name)+"\n"+(text==null?"":text),15);
                             m.setBackgroundResource(R.drawable.card);
                             LinearLayout.LayoutParams mp=new LinearLayout.LayoutParams(-1,dp(65));
                             mp.bottomMargin=dp(6); messages.addView(m,mp);
@@ -912,6 +1203,7 @@ public class MainActivity extends Activity {
             float w=getWidth(),h=getHeight();
             c.drawColor(Color.rgb(2,7,12));
             long now=System.currentTimeMillis();
+            float pulse=(float)(0.5+0.5*Math.sin(now/320.0));
 
             paint.setTextSize(Math.max(11,getResources().getDisplayMetrics().density*11));
             for(int i=0;i<x.length;i++){
@@ -938,9 +1230,11 @@ public class MainActivity extends Activity {
             paint.setColor(Color.argb(190,1,5,9));
             c.drawRect(cx-78*scale,cy-2*scale,cx+78*scale,cy+40*scale,paint);
 
-            paint.setColor(Color.argb(230,255,212,0));
+            paint.setColor(Color.argb((int)(180+55*pulse),255,212,0));
             c.drawOval(cx-54*scale,cy+4*scale,cx-18*scale,cy+15*scale,paint);
             c.drawOval(cx+18*scale,cy+4*scale,cx+54*scale,cy+15*scale,paint);
+            paint.setColor(Color.argb((int)(28+40*pulse),255,212,0));
+            c.drawCircle(cx,cy+10*scale,95*scale+18*scale*pulse,paint);
             paint.setColor(Color.argb(70,255,212,0));
             c.drawCircle(cx-36*scale,cy+9*scale,18*scale,paint);
             c.drawCircle(cx+36*scale,cy+9*scale,18*scale,paint);
