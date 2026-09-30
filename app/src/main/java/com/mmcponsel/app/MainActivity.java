@@ -221,7 +221,16 @@ public class MainActivity extends Activity {
 
         title=tv(heading,22); title.setTypeface(Typeface.DEFAULT,Typeface.BOLD);
         mainColumn.addView(title,new LinearLayout.LayoutParams(-1,dp(50)));
-        topMenu();
+        if("login".equals(currentRoute)) {
+            TextView warm=tv("hangat",18);
+            warm.setGravity(Gravity.CENTER);
+            warm.setTypeface(Typeface.DEFAULT,Typeface.BOLD);
+            warm.setTextColor(YELLOW);
+            warm.setPadding(0,dp(2),0,dp(8));
+            mainColumn.addView(warm,new LinearLayout.LayoutParams(-1,dp(38)));
+        } else {
+            topMenu();
+        }
         content=new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL);
         content.setPadding(0,0,0,dp(18));
@@ -321,6 +330,10 @@ public class MainActivity extends Activity {
         logoLp.bottomMargin=dp(4);
         content.addView(hackerLogo,logoLp);
 
+        // Akses admin dibuat privat: tidak ada tombol/kolom admin di halaman login.
+        // Tekan lama logo hacker untuk membuka halaman login admin.
+        hackerLogo.setOnLongClickListener(v->{ showAdminLogin(); return true; });
+
         TextView brand=tv("MMC PONSEL",26);
         brand.setGravity(Gravity.CENTER);
         brand.setTypeface(Typeface.DEFAULT,Typeface.BOLD);
@@ -348,12 +361,10 @@ public class MainActivity extends Activity {
         forgot.setTextColor(WHITE); forgot.setBackgroundResource(R.drawable.card);
         content.addView(forgot);
 
-        TextView note=tv("Login menggunakan username dan password.\nAkun admin: username miss • password miss11",13);
+        TextView note=tv("Login menggunakan username dan password.",13);
         note.setGravity(Gravity.CENTER);
         note.setTextColor(MUTED);
         content.addView(note);
-        addDeveloperCard();
-
         register.setOnClickListener(v->registerAccount());
         forgot.setOnClickListener(v->forgotPassword());
         login.setOnClickListener(v->loginWithUsername(username.getText().toString(),pass.getText().toString()));
@@ -367,13 +378,10 @@ public class MainActivity extends Activity {
         }
         if(!firebaseReady()) return;
 
-        // Akun admin tetap divalidasi melalui Firebase Authentication.
+        // Login publik hanya untuk akun member. Akses admin tidak diproses dari form login umum.
+        // Username "miss" dicadangkan untuk akun admin dan hanya dapat dibuka melalui akses admin privat.
         if("miss".equals(username)){
-            if(!"miss11".equals(pw)){
-                Toast.makeText(this,"Username atau password admin salah",Toast.LENGTH_LONG).show(); return;
-            }
-            loginAdminFixedCredentials();
-            return;
+            Toast.makeText(this,"Akun admin menggunakan akses pribadi.",Toast.LENGTH_LONG).show(); return;
         }
 
         // Username pengguna dicari di Firestore, lalu email akun dipakai untuk Firebase Auth.
@@ -393,21 +401,6 @@ public class MainActivity extends Activity {
                     });
                 })
                 .addOnFailureListener(e->Toast.makeText(this,"Gagal memeriksa akun: "+e.getMessage(),Toast.LENGTH_LONG).show());
-    }
-
-    void loginAdminFixedCredentials(){
-        final String adminEmail="miss@mmcponsel.app";
-        auth.signInWithEmailAndPassword(adminEmail,"miss11").addOnCompleteListener(this,t->{
-            if(t.isSuccessful()){
-                activateAdminRole();
-                return;
-            }
-            // Membuat akun owner hanya jika akun admin belum pernah dibuat.
-            auth.createUserWithEmailAndPassword(adminEmail,"miss11").addOnCompleteListener(this,create->{
-                if(create.isSuccessful()) activateAdminRole();
-                else Toast.makeText(this,"Login admin gagal. Pastikan Firebase Email/Password aktif dan akun admin belum menggunakan password lain.",Toast.LENGTH_LONG).show();
-            });
-        });
     }
 
     void activateAdminRole(){
