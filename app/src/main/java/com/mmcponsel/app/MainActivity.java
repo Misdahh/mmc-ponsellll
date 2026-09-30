@@ -10,6 +10,7 @@ import android.graphics.Typeface;
 import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.Path;
+import android.graphics.RectF;
 import android.net.Uri;
 import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
@@ -365,7 +366,19 @@ public class MainActivity extends Activity {
         EditText username=field("Username");
         EditText pass=field("Password");
         pass.setInputType(android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD);
-        content.addView(username); content.addView(pass);
+
+        // Form login dibuat lebih kecil/sedang dan diberi bingkai neon berputar.
+        NeonPanel loginPanel=new NeonPanel(this);
+        LinearLayout loginFields=new LinearLayout(this);
+        loginFields.setOrientation(LinearLayout.VERTICAL);
+        loginFields.setPadding(dp(12),dp(10),dp(12),dp(10));
+        addCompactField(loginFields,username);
+        addCompactField(loginFields,pass);
+        loginPanel.addView(loginFields,new android.widget.FrameLayout.LayoutParams(-1,-2));
+        LinearLayout.LayoutParams neonLp=new LinearLayout.LayoutParams(-1,-2);
+        neonLp.gravity=Gravity.CENTER_HORIZONTAL;
+        neonLp.setMargins(dp(28),dp(8),dp(28),dp(10));
+        content.addView(loginPanel,neonLp);
 
         Button register=btn("📝 Daftar Akun Baru");
         register.setTextColor(WHITE); register.setBackgroundResource(R.drawable.card);
@@ -443,7 +456,23 @@ public class MainActivity extends Activity {
         EditText pass=field("Password minimal 6 karakter");
         EditText confirm=field("Ulangi password");
         pass.setInputType(129); confirm.setInputType(129);
-        content.addView(name); content.addView(username); content.addView(email); content.addView(pass); content.addView(confirm);
+
+        // Form daftar akun memakai ukuran input yang sama dengan login dan neon berputar.
+        NeonPanel registerPanel=new NeonPanel(this);
+        LinearLayout registerFields=new LinearLayout(this);
+        registerFields.setOrientation(LinearLayout.VERTICAL);
+        registerFields.setPadding(dp(12),dp(10),dp(12),dp(10));
+        addCompactField(registerFields,name);
+        addCompactField(registerFields,username);
+        addCompactField(registerFields,email);
+        addCompactField(registerFields,pass);
+        addCompactField(registerFields,confirm);
+        registerPanel.addView(registerFields,new android.widget.FrameLayout.LayoutParams(-1,-2));
+        LinearLayout.LayoutParams registerNeonLp=new LinearLayout.LayoutParams(-1,-2);
+        registerNeonLp.gravity=Gravity.CENTER_HORIZONTAL;
+        registerNeonLp.setMargins(dp(28),dp(8),dp(28),dp(10));
+        content.addView(registerPanel,registerNeonLp);
+
         Button create=btn("Buat Akun"); content.addView(create);
         Button back=btn("Kembali Login"); back.setTextColor(WHITE); back.setBackgroundResource(R.drawable.card); content.addView(back);
         create.setOnClickListener(v->{
@@ -766,6 +795,50 @@ public class MainActivity extends Activity {
         }catch(Exception e){content.addView(tv("Firebase belum dikonfigurasi: "+e.getMessage(),14));}
     }
     EditText field(String h){EditText e=new EditText(this);e.setHint(h);e.setTextColor(WHITE);e.setHintTextColor(MUTED);e.setBackgroundResource(R.drawable.edit);return e;}
+
+    void addCompactField(LinearLayout parent, EditText e){
+        e.setTextSize(16);
+        e.setSingleLine(true);
+        e.setPadding(dp(12),0,dp(12),0);
+        LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,dp(52));
+        lp.setMargins(0,dp(4),0,dp(4));
+        parent.addView(e,lp);
+    }
+
+    class NeonPanel extends android.widget.FrameLayout {
+        Paint neonPaint=new Paint(Paint.ANTI_ALIAS_FLAG);
+        float rotation=0f;
+        Runnable animator;
+        NeonPanel(android.content.Context c){
+            super(c);
+            setWillNotDraw(false);
+            setPadding(dp(2),dp(2),dp(2),dp(2));
+            setLayerType(View.LAYER_TYPE_SOFTWARE,null);
+            animator=new Runnable(){ @Override public void run(){
+                rotation=(rotation+5f)%360f;
+                invalidate();
+                postDelayed(this,30);
+            }};
+            post(animator);
+        }
+        @Override protected void onDraw(Canvas c){
+            super.onDraw(c);
+            float w=getWidth(), h=getHeight();
+            if(w<=0||h<=0) return;
+            RectF r=new RectF(dp(3),dp(3),w-dp(3),h-dp(3));
+            neonPaint.setStyle(Paint.Style.STROKE);
+            neonPaint.setStrokeCap(Paint.Cap.ROUND);
+            neonPaint.setStrokeWidth(dp(2));
+            int[] colors={Color.rgb(0,229,255),Color.rgb(168,85,247),Color.rgb(255,212,0),Color.rgb(0,255,170)};
+            for(int i=0;i<colors.length;i++){
+                neonPaint.setColor(colors[i]);
+                neonPaint.setAlpha(190);
+                neonPaint.setShadowLayer(dp(8),0,0,colors[i]);
+                c.drawArc(r,rotation+i*90f,58f,false,neonPaint);
+            }
+            neonPaint.clearShadowLayer();
+        }
+    }
     void gridMenus(){String[][] m={{"📱 HP Baru","Jual HP baru"},{"♻ HP Bekas","HP second berkualitas"},{"🛠 HP Rusak","Sparepart / perbaikan"},{"🔧 Service","Miss Cell"},{"🛒 Jual HP","Jual perangkat Anda"},{"💳 Beli HP","Belanja HP"}}; for(String[] x:m){Button b=btn(x[0]+"\n"+x[1]);b.setTextColor(WHITE);b.setBackgroundResource(R.drawable.card);content.addView(b);if(x[0].contains("Service"))b.setOnClickListener(v->service());else if(x[0].contains("Beli"))b.setOnClickListener(v->category());else if(x[0].contains("Jual"))b.setOnClickListener(v->sell());}}
     void productCard(String[] p){productCard(p,content);}
     void productCard(String[] p, LinearLayout target){LinearLayout c=new LinearLayout(this);c.setOrientation(LinearLayout.VERTICAL);c.setPadding(dp(8),dp(8),dp(8),dp(8));c.setBackgroundResource(R.drawable.card);TextView n=tv(p[0],17);n.setTypeface(null,Typeface.BOLD);c.addView(n);c.addView(tv(p[1]+" • "+p[2]+" • ⭐ "+p[3],15));Button b=btn("Lihat detail / Tambah keranjang");c.addView(b);b.setOnClickListener(v->detail(p));target.addView(c);}
