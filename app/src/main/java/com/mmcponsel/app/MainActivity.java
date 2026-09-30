@@ -62,7 +62,7 @@ import com.google.firebase.functions.FirebaseFunctions;
 
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.concurrent.Executor;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public class MainActivity extends Activity {
@@ -80,7 +80,7 @@ public class MainActivity extends Activity {
     boolean adminMode=false, memberMode=false;
     CredentialManager credentialManager;
     CallbackManager callbackManager;
-    final Executor authExecutor = Executors.newSingleThreadExecutor();
+    final ExecutorService authExecutor = Executors.newSingleThreadExecutor();
     MediaPlayer ambientPlayer;
 
     int dp(float n){return (int)(n*getResources().getDisplayMetrics().density+.5f);}
@@ -385,7 +385,7 @@ public class MainActivity extends Activity {
                     .build();
             GetCredentialRequest request=new GetCredentialRequest.Builder()
                     .addCredentialOption(googleIdOption).build();
-            credentialManager.getCredentialAsync(request,new CancellationSignal(),authExecutor,
+            credentialManager.getCredentialAsync(this,request,new CancellationSignal(),authExecutor,
                     new CredentialManagerCallback<Credential, GetCredentialException>() {
                         @Override public void onResult(@NonNull Credential credential){
                             runOnUiThread(()->handleGoogleCredential(credential));
