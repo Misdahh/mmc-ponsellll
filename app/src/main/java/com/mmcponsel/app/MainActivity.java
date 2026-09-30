@@ -33,6 +33,7 @@ import androidx.annotation.NonNull;
 import androidx.credentials.Credential;
 import androidx.credentials.CredentialManager;
 import androidx.credentials.CredentialManagerCallback;
+import androidx.credentials.GetCredentialResponse;
 import androidx.credentials.CustomCredential;
 import androidx.credentials.GetCredentialRequest;
 import androidx.credentials.exceptions.GetCredentialException;
@@ -430,21 +431,18 @@ public class MainActivity extends Activity {
             GetCredentialRequest request=new GetCredentialRequest.Builder()
                     .addCredentialOption(googleIdOption).build();
             credentialManager.getCredentialAsync(this, request, new CancellationSignal(), authExecutor,
-        new CredentialManagerCallback<GetCredentialResponse, GetCredentialException>() {
-            @Override public void onResult(@NonNull GetCredentialResponse response){
-                runOnUiThread(() -> handleGoogleCredential(response.getCredential()));
-            }
-
-            @Override public void onError(@NonNull GetCredentialException e){
-                runOnUiThread(() ->
-                        Toast.makeText(
-                                MainActivity.this,
-                                "Login Google dibatalkan/gagal: " + e.getLocalizedMessage(),
-                                Toast.LENGTH_LONG
-                        ).show()
-                );
-            }
-        });
+                    new CredentialManagerCallback<GetCredentialResponse, GetCredentialException>() {
+                        @Override public void onResult(@NonNull GetCredentialResponse response){
+                            runOnUiThread(() -> handleGoogleCredential(response.getCredential()));
+                        }
+                        @Override public void onError(@NonNull GetCredentialException e){
+                            runOnUiThread(() -> Toast.makeText(
+                                    MainActivity.this,
+                                    "Login Google dibatalkan/gagal: " + e.getLocalizedMessage(),
+                                    Toast.LENGTH_LONG
+                            ).show());
+                        }
+                    });
         } catch(Exception e){
             Toast.makeText(this,"Login Google belum terkonfigurasi: "+e.getMessage(),Toast.LENGTH_LONG).show();
         }
@@ -734,7 +732,7 @@ public class MainActivity extends Activity {
         content.addView(section("Pilih Merek"));
         LinearLayout brands=new LinearLayout(this); brands.setOrientation(LinearLayout.HORIZONTAL);
         for(String x:new String[]{" Apple","Samsung","Xiaomi","OPPO","vivo"}){Button b=chip(x,false);brands.addView(b,new LinearLayout.LayoutParams(0,dp(48),1));}
-        content.addView(brands); content.addView(section("Katalog HP")); loadCategoryFromServer();
+        content.addView(brands); content.addView(section("Katalog HP"));
     }
         void service(){
         base("Service HP — Miss Cell");
