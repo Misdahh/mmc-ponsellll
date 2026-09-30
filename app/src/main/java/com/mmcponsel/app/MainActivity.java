@@ -36,6 +36,7 @@ import androidx.annotation.NonNull;
 import androidx.credentials.Credential;
 import androidx.credentials.CredentialManager;
 import androidx.credentials.CredentialManagerCallback;
+import androidx.credentials.GetCredentialResponse;
 import androidx.credentials.CustomCredential;
 import androidx.credentials.GetCredentialRequest;
 import androidx.credentials.exceptions.GetCredentialException;
@@ -386,8 +387,9 @@ public class MainActivity extends Activity {
             GetCredentialRequest request=new GetCredentialRequest.Builder()
                     .addCredentialOption(googleIdOption).build();
             credentialManager.getCredentialAsync(this,request,new CancellationSignal(),authExecutor,
-                    new CredentialManagerCallback<Credential, GetCredentialException>() {
-                        @Override public void onResult(@NonNull Credential credential){
+                    new CredentialManagerCallback<GetCredentialResponse, GetCredentialException>() {
+                        @Override public void onResult(@NonNull GetCredentialResponse response){
+                            Credential credential=response.getCredential();
                             runOnUiThread(()->handleGoogleCredential(credential));
                         }
                         @Override public void onError(@NonNull GetCredentialException e){
