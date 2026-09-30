@@ -1,26 +1,59 @@
 name: Build MMC PONSEL APK
+
 on:
   workflow_dispatch:
   push:
     branches: [ main, master ]
+
 permissions:
   contents: read
+
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
-        with: { distribution: temurin, java-version: '17' }
-      - uses: android-actions/setup-android@v3
-      - name: Install SDK
-        run: yes | sdkmanager --licenses >/dev/null || true; sdkmanager "platforms;android-35" "build-tools;35.0.0"
-      - uses: gradle/actions/setup-gradle@v4
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      # GitHub-hosted Ubuntu runners already provide the Android SDK.
+      # Do not use android-actions/setup-android here because its current
+      # package bootstrap can request the removed legacy "tools" package.
+      - name: Install Android SDK packages
+        shell: bash
+        run: |
+          set -e
+          echo "ANDROID_HOME=${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
+          SDKMANAGER="${ANDROID_HOME:-$ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager"
+          if [ ! -x "$SDKMANAGER" ]; then
+            SDKMANAGER="$(command -v sdkmanager)"
+          fi
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" --install \
+            "platform-tools" \
+            "platforms;android-35" \
+            "build-tools;35.0.0"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.13'
+
       - name: Build debug APK
-        run: gradle assembleDebug
-      - uses: actions/upload-artifact@v4
+        run: gradle --no-daemon assembleDebug
+
+      - name: Verify APK exists
+        run: test -f app/build/outputs/apk/debug/app-debug.apk
+
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v4
         with:
           name: mmc-ponsel-debug-apk
           path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
