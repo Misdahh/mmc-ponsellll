@@ -126,8 +126,7 @@ public class MainActivity extends Activity {
         logo.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
         box.addView(logo,new LinearLayout.LayoutParams(-1,dp(190)));
         TextView title=tv("MMC PONSEL",30); title.setGravity(Gravity.CENTER); title.setTypeface(null,Typeface.BOLD); title.setTextColor(YELLOW); box.addView(title);
-        TextView msg=tv("Koneksi internet diperlukan.
-MMC PONSEL hanya dapat digunakan secara online.",16); msg.setGravity(Gravity.CENTER); msg.setTextColor(MUTED); box.addView(msg);
+        TextView msg=tv("Koneksi internet diperlukan.\nMMC PONSEL hanya dapat digunakan secara online.",16); msg.setGravity(Gravity.CENTER); msg.setTextColor(MUTED); box.addView(msg);
         Button retry=btn("↻ Coba Lagi"); box.addView(retry,new LinearLayout.LayoutParams(-1,dp(52)));
         retry.setOnClickListener(v->{ if(isOnline()) showSplash(); else Toast.makeText(this,"Internet masih belum tersambung.",Toast.LENGTH_SHORT).show(); });
         setContentView(box);
