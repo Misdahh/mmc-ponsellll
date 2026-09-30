@@ -979,7 +979,7 @@ public class MainActivity extends Activity {
         nav.setOrientation(LinearLayout.HORIZONTAL);
         nav.setGravity(Gravity.CENTER);
         nav.setPadding(dp(6),dp(5),dp(6),dp(7));
-        nav.setBackgroundResource(R.drawable.nav_bar);
+        nav.setBackgroundResource(R.drawable.card);
         String[][] items={{"⌂","Beranda"},{"▣","Beli"},{"⚒","Service"},{"●","Profil"}};
         for(String[] item:items){
             LinearLayout cell=new LinearLayout(this);
@@ -1009,7 +1009,7 @@ public class MainActivity extends Activity {
         identity.setOrientation(LinearLayout.VERTICAL);
         identity.setGravity(Gravity.CENTER_HORIZONTAL);
         identity.setPadding(dp(16),dp(16),dp(16),dp(16));
-        identity.setBackgroundResource(R.drawable.profile_card);
+        identity.setBackgroundResource(R.drawable.card);
 
         profileAvatar=new ImageView(this);
         profileAvatar.setScaleType(ImageView.ScaleType.CENTER_CROP);
@@ -1060,7 +1060,7 @@ public class MainActivity extends Activity {
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
         row.setPadding(dp(12),dp(7),dp(10),dp(7));
-        row.setBackgroundResource(R.drawable.profile_row);
+        row.setBackgroundResource(R.drawable.card);
         TextView ic=tv(icon,20); ic.setGravity(Gravity.CENTER); row.addView(ic,new LinearLayout.LayoutParams(dp(38),dp(52)));
         LinearLayout texts=new LinearLayout(this); texts.setOrientation(LinearLayout.VERTICAL); texts.setGravity(Gravity.CENTER_VERTICAL);
         TextView t=tv(titleText,15); t.setTypeface(null,Typeface.BOLD); t.setTextColor(WHITE); texts.addView(t);
