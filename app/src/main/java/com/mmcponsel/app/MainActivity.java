@@ -221,13 +221,29 @@ public class MainActivity extends Activity {
 
         title=tv(heading,22); title.setTypeface(Typeface.DEFAULT,Typeface.BOLD);
         mainColumn.addView(title,new LinearLayout.LayoutParams(-1,dp(50)));
-        if("login".equals(currentRoute)) {
-            TextView warm=tv("hangat",18);
-            warm.setGravity(Gravity.CENTER);
-            warm.setTypeface(Typeface.DEFAULT,Typeface.BOLD);
-            warm.setTextColor(YELLOW);
-            warm.setPadding(0,dp(2),0,dp(8));
-            mainColumn.addView(warm,new LinearLayout.LayoutParams(-1,dp(38)));
+        if("login".equals(currentRoute) || "auth".equals(currentRoute)) {
+            // Halaman login memakai tulisan animasi "miss cinta tuhan" sebagai pengganti "hangat".
+            if("login".equals(currentRoute)) {
+                TextView missCinta=tv("miss cinta tuhan",20);
+                missCinta.setGravity(Gravity.CENTER);
+                missCinta.setTypeface(Typeface.DEFAULT,Typeface.BOLD);
+                missCinta.setTextColor(YELLOW);
+                missCinta.setPadding(0,dp(2),0,dp(8));
+                mainColumn.addView(missCinta,new LinearLayout.LayoutParams(-1,dp(42)));
+                missCinta.setAlpha(0.35f);
+                missCinta.setScaleX(0.96f);
+                missCinta.setScaleY(0.96f);
+                missCinta.animate().alpha(1f).scaleX(1f).scaleY(1f).setDuration(900).start();
+                missCinta.postDelayed(new Runnable(){
+                    @Override public void run(){
+                        missCinta.animate().alpha(0.55f).scaleX(1.02f).scaleY(1.02f).setDuration(700).withEndAction(()->
+                                missCinta.animate().alpha(1f).scaleX(1f).scaleY(1f).setDuration(700).start()
+                        ).start();
+                        missCinta.postDelayed(this,1450);
+                    }
+                },1450);
+            }
+            // Tidak ada menu Home/Produk/Service/Profil di atas halaman daftar/lupa password.
         } else {
             topMenu();
         }
@@ -249,6 +265,7 @@ public class MainActivity extends Activity {
         if(heading==null) return "page";
         String h=heading.toLowerCase();
         if(h.contains("login")) return "login";
+        if(h.contains("daftar akun") || h.contains("lupa password")) return "auth";
         if(h.contains("kategori") || h.contains("produk")) return "products";
         if(h.contains("service")) return "service";
         if(h.contains("profil")) return "profile";
