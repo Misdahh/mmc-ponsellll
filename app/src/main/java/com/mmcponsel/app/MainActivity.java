@@ -429,15 +429,22 @@ public class MainActivity extends Activity {
                     .build();
             GetCredentialRequest request=new GetCredentialRequest.Builder()
                     .addCredentialOption(googleIdOption).build();
-            credentialManager.getCredentialAsync(request,new CancellationSignal(),authExecutor,
-                    new CredentialManagerCallback<Credential, GetCredentialException>() {
-                        @Override public void onResult(@NonNull Credential credential){
-                            runOnUiThread(()->handleGoogleCredential(credential));
-                        }
-                        @Override public void onError(@NonNull GetCredentialException e){
-                            runOnUiThread(()->Toast.makeText(MainActivity.this,"Login Google dibatalkan/gagal: "+e.getLocalizedMessage(),Toast.LENGTH_LONG).show());
-                        }
-                    });
+            credentialManager.getCredentialAsync(this, request, new CancellationSignal(), authExecutor,
+        new CredentialManagerCallback<GetCredentialResponse, GetCredentialException>() {
+            @Override public void onResult(@NonNull GetCredentialResponse response){
+                runOnUiThread(() -> handleGoogleCredential(response.getCredential()));
+            }
+
+            @Override public void onError(@NonNull GetCredentialException e){
+                runOnUiThread(() ->
+                        Toast.makeText(
+                                MainActivity.this,
+                                "Login Google dibatalkan/gagal: " + e.getLocalizedMessage(),
+                                Toast.LENGTH_LONG
+                        ).show()
+                );
+            }
+        });
         } catch(Exception e){
             Toast.makeText(this,"Login Google belum terkonfigurasi: "+e.getMessage(),Toast.LENGTH_LONG).show();
         }
