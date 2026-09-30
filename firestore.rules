@@ -47,11 +47,11 @@ service cloud.firestore {
     }
 
     match /solutionGroup/{groupId} {
-      allow read: if admin() || member();
-      allow create, update: if admin() || member();
+      allow read: if signedIn();
+      allow create, update: if signedIn();
       match /messages/{messageId} {
-        allow read, create: if admin() || member();
-        allow update, delete: if admin() || member();
+        allow read, create: if signedIn();
+        allow update, delete: if admin() || (signedIn() && resource.data.uid == request.auth.uid);
       }
     }
 

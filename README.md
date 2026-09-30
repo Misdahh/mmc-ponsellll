@@ -112,3 +112,18 @@ Deploy backend:
 `firebase deploy --only functions,firestore:rules`
 
 Untuk akun yang diblokir, aplikasi memeriksa field `blocked` pada dokumen `users/{uid}` dan menolak masuk. Penghapusan akun Firebase dilakukan server-side melalui `adminDeleteUser`, bukan dari APK.
+
+
+## Login v1.16.0
+- Halaman login dirapikan dengan logo hacker di bagian atas tengah.
+- Login utama menggunakan username + password.
+- Daftar Akun ditampilkan sebelum tombol Login.
+- Username pengguna disimpan di Firestore dan dipakai untuk mencari email Firebase Authentication.
+- Admin: username `miss`, password `miss11`, dipetakan ke akun Firebase `miss@mmcponsel.app` dan divalidasi melalui fungsi `ensureAdminRole`.
+- Untuk penggunaan produksi, kredensial admin sebaiknya diganti karena kredensial yang diketahui publik tidak aman.
+
+
+## v1.18.0
+- Foto profil online via Firebase Storage.
+- Badge dan tampilan berbeda untuk ADMIN dan MEMBER.
+- Panel admin dipisahkan secara visual dari area pengguna biasa.
