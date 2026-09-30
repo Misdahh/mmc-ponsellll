@@ -454,8 +454,8 @@ public class MainActivity extends Activity {
             try {
                 GoogleIdTokenCredential googleCredential=GoogleIdTokenCredential.createFrom(((CustomCredential)credential).getData());
                 firebaseAuthWithGoogle(googleCredential.getIdToken());
-            } catch(GoogleIdTokenParsingException e){
-                Toast.makeText(this,"Token Google tidak valid.",Toast.LENGTH_LONG).show();
+            } catch(Exception e){
+                Toast.makeText(this,"Token Google tidak valid: "+e.getMessage(),Toast.LENGTH_LONG).show();
             }
         } else {
             Toast.makeText(this,"Jenis kredensial Google tidak didukung.",Toast.LENGTH_LONG).show();
