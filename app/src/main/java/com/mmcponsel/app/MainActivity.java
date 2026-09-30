@@ -796,7 +796,8 @@ public class MainActivity extends Activity {
         TextView name=tv(u.getDisplayName()==null||u.getDisplayName().trim().isEmpty()?"Pelanggan":u.getDisplayName(),22); name.setTypeface(Typeface.DEFAULT,Typeface.BOLD); name.setTextColor(WHITE);
         idText.addView(name);
         TextView email=tv(u.getEmail()==null?"":u.getEmail(),13); email.setTextColor(MUTED); idText.addView(email);
-        TextView badge=tv("  MEMBER MMC PONSEL  ",11); badge.setTextColor(Color.BLACK); badge.setGravity(Gravity.CENTER);
+        String roleLabel=adminMode?"  ADMIN MMC PONSEL  ":(memberMode?"  MEMBER MMC PONSEL  ":"  PENGGUNA MMC PONSEL  ");
+        TextView badge=tv(roleLabel,11); badge.setTextColor(Color.BLACK); badge.setGravity(Gravity.CENTER);
         android.graphics.drawable.GradientDrawable badgeBg=new android.graphics.drawable.GradientDrawable(); badgeBg.setColor(currentAccent); badgeBg.setCornerRadius(dp(20)); badge.setBackground(badgeBg);
         LinearLayout.LayoutParams badgeLp=new LinearLayout.LayoutParams(-2,dp(30)); badgeLp.setMargins(0,dp(8),0,0); idText.addView(badge,badgeLp);
         identity.addView(idText,new LinearLayout.LayoutParams(0,-2,1));
@@ -810,6 +811,25 @@ public class MainActivity extends Activity {
         LinearLayout stats=panel(); stats.setOrientation(LinearLayout.HORIZONTAL); stats.setGravity(Gravity.CENTER);
         addProfileStat(stats,"📦","Pesanan"); addProfileStat(stats,"🔧","Service"); addProfileStat(stats,"⭐","Member");
         content.addView(stats);
+
+        // Menu pengelolaan barang hanya terlihat untuk Admin atau Member yang sudah login.
+        if(adminMode || memberMode){
+            content.addView(section(adminMode?"🛠 MENU ADMIN":"👥 MENU MEMBER"));
+            TextView accessInfo=tv("Khusus "+(adminMode?"Admin":"Member")+" • Tambahkan barang ke katalog MMC PONSEL kapan saja.",13);
+            accessInfo.setTextColor(MUTED);
+            content.addView(accessInfo);
+            Button addProduct=btn("➕ Tambah Barang Baru");
+            addProduct.setTextColor(Color.BLACK);
+            LinearLayout.LayoutParams addProductLp=new LinearLayout.LayoutParams(-1,dp(54));
+            addProductLp.setMargins(0,dp(6),0,dp(6));
+            content.addView(addProduct,addProductLp);
+            addProduct.setOnClickListener(v->{ if(adminMode || memberMode) adminAddProduct(); else Toast.makeText(this,"Menu ini khusus Admin dan Member.",Toast.LENGTH_LONG).show(); });
+            Button manageProducts=btn("📦 Lihat Barang di Database");
+            manageProducts.setTextColor(WHITE);
+            manageProducts.setBackgroundResource(R.drawable.card);
+            content.addView(manageProducts,new LinearLayout.LayoutParams(-1,dp(50)));
+            manageProducts.setOnClickListener(v->{ if(adminMode || memberMode) adminProducts(); });
+        }
 
         for(String[] item:new String[][]{{"👤","Data Akun"},{"📍","Alamat Pengiriman"},{"💳","Metode Pembayaran"},{"🔔","Notifikasi"},{"📦","Transaksi Saya"},{"💬","Chat Admin"},{"👨‍💻","Tentang MMC PONSEL"}}){
             Button b=btn(item[0]+"   "+item[1]+"   ›"); b.setTextColor(WHITE); b.setGravity(Gravity.CENTER_VERTICAL|Gravity.LEFT); b.setBackgroundResource(R.drawable.card); content.addView(b);
@@ -868,6 +888,10 @@ public class MainActivity extends Activity {
     }
 
     void adminAddProduct(){
+        if(!adminMode && !memberMode){
+            Toast.makeText(this,"Tambah barang hanya tersedia untuk Admin dan Member.",Toast.LENGTH_LONG).show();
+            return;
+        }
         selectedProductImage=null;
         base((memberMode?"👥 Member":"🛠 Admin")+" • ➕ Tambah Barang");
         EditText name=field("Nama produk *"); EditText price=field("Harga * — contoh Rp 3.500.000");
@@ -907,7 +931,16 @@ public class MainActivity extends Activity {
             }
         });
     }
-    void saveProductData(java.util.HashMap<String,Object> data){ db.collection("products").add(data).addOnSuccessListener(ref->{Toast.makeText(this,"Barang berhasil ditambahkan",Toast.LENGTH_LONG).show();adminPanel();}).addOnFailureListener(e->Toast.makeText(this,"Gagal menyimpan: "+e.getMessage(),Toast.LENGTH_LONG).show()); }
+    void saveProductData(java.util.HashMap<String,Object> data){
+        if(!adminMode && !memberMode){
+            Toast.makeText(this,"Akses ditolak: hanya Admin dan Member yang dapat menambah barang.",Toast.LENGTH_LONG).show();
+            return;
+        }
+        db.collection("products").add(data).addOnSuccessListener(ref->{
+            Toast.makeText(this,"Barang berhasil ditambahkan ke marketplace",Toast.LENGTH_LONG).show();
+            if(memberMode && !adminMode) memberPanel(); else adminPanel();
+        }).addOnFailureListener(e->Toast.makeText(this,"Gagal menyimpan: "+e.getMessage(),Toast.LENGTH_LONG).show());
+    }
 
     void reviews(String[] p){
         base("⭐ Rating & Ulasan");
@@ -1074,6 +1107,23 @@ public class MainActivity extends Activity {
                 float cx=w*.18f,cy=h*.78f, rr=35+(float)(12*Math.sin(now/800.0));
                 c.drawCircle(cx,cy,rr,paint); c.drawCircle(cx,cy,rr*1.8f,paint);
             }
+            // Efek anime: kilau bintang dan garis energi bergerak, tetap ringan tanpa gambar eksternal.
+            paint.setStyle(Paint.Style.STROKE);
+            paint.setStrokeWidth(1.5f);
+            for(int i=0;i<8;i++){
+                float sx=(float)((x[i]*w + (now/18.0*(i%3+1)))%(Math.max(1,w)));
+                float sy=(float)(y[i]*h);
+                float sparkle=4f+(float)(3f*Math.abs(Math.sin(now/180.0+i)));
+                int sa=35+(int)(55*Math.abs(Math.sin(now/260.0+i)));
+                paint.setColor(Color.argb(sa,Color.red(particle),Color.green(particle),Color.blue(particle)));
+                c.drawLine(sx-sparkle,sy,sx+sparkle,sy,paint);
+                c.drawLine(sx,sy-sparkle,sx,sy+sparkle,paint);
+            }
+            paint.setStrokeWidth(2.2f);
+            paint.setColor(Color.argb(18,Color.red(line),Color.green(line),Color.blue(line)));
+            float slash=(now%5200L)/5200f*(w+250)-125;
+            c.drawLine(slash,h*.12f,slash-95,h*.30f,paint);
+            c.drawLine(w-slash*.55f,h*.58f,w-slash*.55f-70,h*.72f,paint);
             postInvalidateDelayed(33);
         }
     }
