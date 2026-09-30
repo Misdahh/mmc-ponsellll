@@ -84,8 +84,8 @@ exports.ensureMemberRole = onCall(async (request) => {
 exports.ensureAdminRole = onCall(async (request) => {
   if (!request.auth) throw new HttpsError("unauthenticated", "Login diperlukan.");
   const user = await admin.auth().getUser(request.auth.uid);
-  if (user.email !== "miss@mmcponsel.app") {
-    throw new HttpsError("permission-denied", "Akun ini bukan akun admin MMC PONSEL.");
+  if (user.email !== "miss@mmcponsel.app" || !user.emailVerified) {
+    throw new HttpsError("permission-denied", "Akun admin Firebase tidak valid atau email belum terverifikasi.");
   }
   await admin.auth().setCustomUserClaims(user.uid, {...(user.customClaims || {}), admin: true});
   return {ok: true};
