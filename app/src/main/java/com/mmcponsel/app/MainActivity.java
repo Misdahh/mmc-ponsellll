@@ -410,10 +410,12 @@ public class MainActivity extends Activity {
         }
         if(!firebaseReady()) return;
 
-        // Login publik hanya untuk akun member. Akses admin tidak diproses dari form login umum.
-        // Username "miss" dicadangkan untuk akun admin dan hanya dapat dibuka melalui akses admin privat.
+        // Username admin tetap tidak ditampilkan sebagai menu/tombol.
+        // Jika username pemilik dimasukkan pada form login, autentikasi tetap dilakukan
+        // melalui Firebase Authentication; hak admin hanya diberikan oleh Cloud Function.
         if("miss".equals(username)){
-            Toast.makeText(this,"Akun admin menggunakan akses pribadi.",Toast.LENGTH_LONG).show(); return;
+            loginAdminFirebase(pw);
+            return;
         }
 
         // Username pengguna dicari di Firestore, lalu email akun dipakai untuk Firebase Auth.
@@ -551,6 +553,28 @@ public class MainActivity extends Activity {
         }).addOnFailureListener(e->onFirebaseLogin(user));
     }
 
+    void loginAdminFirebase(String pw){
+        if(pw==null || pw.length()<6){
+            Toast.makeText(this,"Password admin tidak valid",Toast.LENGTH_LONG).show();
+            return;
+        }
+        if(!firebaseReady()) return;
+        auth.signInWithEmailAndPassword("miss@mmcponsel.app",pw).addOnCompleteListener(this,t->{
+            if(!t.isSuccessful()){
+                Toast.makeText(this,"Login gagal. Periksa username/password atau akun Firebase admin.",Toast.LENGTH_LONG).show();
+                return;
+            }
+            FirebaseFunctions.getInstance().getHttpsCallable("ensureAdminRole").call()
+                    .addOnSuccessListener(x->{
+                        adminMode=true; memberMode=false;
+                        sp.edit().putString("role","admin").putString("name","Admin MMC PONSEL").apply();
+                        Toast.makeText(this,"Login admin berhasil",Toast.LENGTH_SHORT).show();
+                        showLoginSuccessLoading(() -> adminPanel());
+                    })
+                    .addOnFailureListener(e->Toast.makeText(this,"Akun Firebase belum memiliki hak admin atau email belum diverifikasi.",Toast.LENGTH_LONG).show());
+        });
+    }
+
     void showAdminLogin(){
         base("🔐 Login Admin MMC PONSEL");
         content.addView(tv("Login admin privat menggunakan Firebase Authentication.",16));
@@ -564,13 +588,7 @@ public class MainActivity extends Activity {
             if(!"miss".equals(user.getText().toString().trim())){Toast.makeText(this,"Username admin salah",Toast.LENGTH_LONG).show();return;}
             String pw=pass.getText().toString();
             if(pw.length()<6){Toast.makeText(this,"Password tidak valid",Toast.LENGTH_LONG).show();return;}
-            if(!firebaseReady())return;
-            auth.signInWithEmailAndPassword("miss@mmcponsel.app",pw).addOnCompleteListener(this,t->{
-                if(!t.isSuccessful()){Toast.makeText(this,"Login admin gagal. Buat akun admin Firebase dan aktifkan Email/Password.",Toast.LENGTH_LONG).show();return;}
-                FirebaseFunctions.getInstance().getHttpsCallable("ensureAdminRole").call()
-                        .addOnSuccessListener(x->{adminMode=true;memberMode=false;Toast.makeText(this,"Login admin berhasil",Toast.LENGTH_SHORT).show();showLoginSuccessLoading(() -> adminPanel());})
-                        .addOnFailureListener(e->Toast.makeText(this,"Akun ini belum memiliki hak admin: "+e.getMessage(),Toast.LENGTH_LONG).show());
-            });
+            loginAdminFirebase(pw);
         });
         back.setOnClickListener(v->showLogin());
     }
@@ -956,49 +974,77 @@ public class MainActivity extends Activity {
     void service(){base("Service HP — Online");content.addView(tv("Form service tersimpan langsung ke server MMC PONSEL",22));for(String s:new String[]{"Layar Pecah / Touchscreen","Ganti Baterai","Tidak Bisa Dinyalakan","Kamera","Water Damage","Software / Unlock","Lainnya"}){Button b=btn(s);content.addView(b);b.setOnClickListener(v->serviceForm(s));}}
     void serviceForm(String type){base("Pesan Service Online");content.addView(tv("Jenis: "+type,20));EditText note=field("Keluhan / catatan");content.addView(note);EditText phone=field("Nomor HP");content.addView(phone);Button b=btn("Kirim Permintaan ke Server");content.addView(b);b.setOnClickListener(v->{FirebaseUser u=auth==null?null:auth.getCurrentUser();if(u==null){showLogin();return;}if(phone.length()==0){Toast.makeText(this,"Masukkan nomor HP",0).show();return;}java.util.HashMap<String,Object> data=new java.util.HashMap<>();data.put("uid",u.getUid());data.put("userName",u.getDisplayName()==null?"Pelanggan":u.getDisplayName());data.put("email",u.getEmail());data.put("type",type);data.put("note",note.getText().toString().trim());data.put("phone",phone.getText().toString().trim());data.put("status","Menunggu Diproses");data.put("createdAt",FieldValue.serverTimestamp());db.collection("serviceRequests").add(data).addOnSuccessListener(x->{Toast.makeText(this,"Permintaan service terkirim online",Toast.LENGTH_LONG).show();transactions();}).addOnFailureListener(e->Toast.makeText(this,"Gagal: "+e.getMessage(),Toast.LENGTH_LONG).show());});}
     void sell(){base("Jual HP Online");EditText category=field("Kategori");EditText brand=field("Merek");EditText model=field("Model");EditText condition=field("Kondisi");EditText price=field("Harga yang diinginkan");EditText phone=field("Nomor kontak");for(EditText e:new EditText[]{category,brand,model,condition,price,phone})content.addView(e);Button b=btn("Kirim Penawaran ke Server");content.addView(b);b.setOnClickListener(v->{FirebaseUser u=auth==null?null:auth.getCurrentUser();if(u==null){showLogin();return;}if(model.length()==0||phone.length()==0){Toast.makeText(this,"Model dan nomor kontak wajib diisi",0).show();return;}java.util.HashMap<String,Object> data=new java.util.HashMap<>();data.put("uid",u.getUid());data.put("userName",u.getDisplayName()==null?"Pelanggan":u.getDisplayName());data.put("email",u.getEmail());data.put("category",category.getText().toString().trim());data.put("brand",brand.getText().toString().trim());data.put("model",model.getText().toString().trim());data.put("condition",condition.getText().toString().trim());data.put("desiredPrice",price.getText().toString().trim());data.put("phone",phone.getText().toString().trim());data.put("status","Menunggu Ditinjau");data.put("createdAt",FieldValue.serverTimestamp());db.collection("sellRequests").add(data).addOnSuccessListener(x->{Toast.makeText(this,"Penawaran terkirim online",Toast.LENGTH_LONG).show();transactions();}).addOnFailureListener(e->Toast.makeText(this,"Gagal: "+e.getMessage(),Toast.LENGTH_LONG).show());});}
-    void bottom(){LinearLayout nav=new LinearLayout(this);nav.setGravity(Gravity.CENTER);String[] a={"⌂ Beranda","🛒 Beli","🔧 Service","👤 Profil"};for(String s:a){Button b=btn(s);b.setTextColor(WHITE);b.setBackgroundColor(Color.TRANSPARENT);nav.addView(b,new LinearLayout.LayoutParams(0,dp(58),1));if(s.contains("Service"))b.setOnClickListener(v->service());if(s.contains("Profil"))b.setOnClickListener(v->profile());if(s.contains("Beli"))b.setOnClickListener(v->category());if(s.contains("Beranda"))b.setOnClickListener(v->home());}mainColumn.addView(nav);}
+    void bottom(){
+        LinearLayout nav=new LinearLayout(this);
+        nav.setOrientation(LinearLayout.HORIZONTAL);
+        nav.setGravity(Gravity.CENTER);
+        nav.setPadding(dp(6),dp(5),dp(6),dp(7));
+        nav.setBackgroundResource(R.drawable.nav_bar);
+        String[][] items={{"⌂","Beranda"},{"▣","Beli"},{"⚒","Service"},{"●","Profil"}};
+        for(String[] item:items){
+            LinearLayout cell=new LinearLayout(this);
+            cell.setOrientation(LinearLayout.VERTICAL);
+            cell.setGravity(Gravity.CENTER);
+            TextView icon=tv(item[0],20); icon.setGravity(Gravity.CENTER); icon.setTextColor(WHITE);
+            TextView label=tv(item[1],11); label.setGravity(Gravity.CENTER); label.setTextColor(MUTED);
+            cell.addView(icon,new LinearLayout.LayoutParams(-1,dp(27)));
+            cell.addView(label,new LinearLayout.LayoutParams(-1,dp(20)));
+            LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,dp(52),1);
+            lp.setMargins(dp(2),0,dp(2),0); nav.addView(cell,lp);
+            cell.setOnClickListener(v->{
+                if("Beranda".equals(item[1])) home();
+                else if("Beli".equals(item[1])) category();
+                else if("Service".equals(item[1])) service();
+                else profile();
+            });
+        }
+        mainColumn.addView(nav,new LinearLayout.LayoutParams(-1,dp(64)));
+    }
     void profile(){
-        base(adminMode?"🛡 Profil Admin MMC PONSEL":"👤 Profil Saya");
+        base(adminMode?"Profil Admin":"Profil Saya");
         FirebaseUser u=auth==null?null:auth.getCurrentUser();
         if(u==null){showLogin();return;}
 
         LinearLayout identity=new LinearLayout(this);
         identity.setOrientation(LinearLayout.VERTICAL);
         identity.setGravity(Gravity.CENTER_HORIZONTAL);
-        identity.setPadding(dp(12),dp(12),dp(12),dp(14));
-        identity.setBackgroundResource(R.drawable.card);
+        identity.setPadding(dp(16),dp(16),dp(16),dp(16));
+        identity.setBackgroundResource(R.drawable.profile_card);
 
         profileAvatar=new ImageView(this);
         profileAvatar.setScaleType(ImageView.ScaleType.CENTER_CROP);
-        LinearLayout.LayoutParams avatarLp=new LinearLayout.LayoutParams(dp(136),dp(136));
+        LinearLayout.LayoutParams avatarLp=new LinearLayout.LayoutParams(dp(104),dp(104));
+        avatarLp.gravity=Gravity.CENTER_HORIZONTAL;
         identity.addView(profileAvatar,avatarLp);
         String cachedPhoto=sp.getString("photoUrl","");
         if(cachedPhoto.length()>0) Glide.with(this).load(cachedPhoto).placeholder(R.drawable.mmc_logo_4k).circleCrop().into(profileAvatar);
         else profileAvatar.setImageResource(R.drawable.mmc_logo_4k);
 
-        TextView name=tv(u.getDisplayName()==null?sp.getString("name","Pelanggan"):u.getDisplayName(),20);
-        name.setGravity(Gravity.CENTER); name.setTypeface(null,Typeface.BOLD); identity.addView(name);
-        TextView email=tv(u.getEmail()==null?"":u.getEmail(),14); email.setGravity(Gravity.CENTER); email.setTextColor(MUTED); identity.addView(email);
-        TextView role=tv(adminMode?"🛡 ADMIN • Kontrol penuh pengguna & produk":"👤 MEMBER • Akses pengguna biasa",14);
-        role.setGravity(Gravity.CENTER); role.setTextColor(adminMode?YELLOW:GREEN); role.setTypeface(null,Typeface.BOLD); identity.addView(role);
-        content.addView(identity);
+        String displayName=u.getDisplayName()==null?sp.getString("name","Pelanggan"):u.getDisplayName();
+        TextView name=tv(displayName,19); name.setGravity(Gravity.CENTER); name.setTypeface(null,Typeface.BOLD); name.setTextColor(WHITE); identity.addView(name,new LinearLayout.LayoutParams(-1,dp(32)));
+        TextView email=tv(u.getEmail()==null?"":u.getEmail(),13); email.setGravity(Gravity.CENTER); email.setTextColor(MUTED); identity.addView(email,new LinearLayout.LayoutParams(-1,dp(28)));
+        TextView role=tv(adminMode?"ADMIN • Akun terverifikasi":"MEMBER • Akun online",12); role.setGravity(Gravity.CENTER); role.setTypeface(null,Typeface.BOLD); role.setTextColor(adminMode?YELLOW:GREEN); identity.addView(role,new LinearLayout.LayoutParams(-1,dp(26)));
+        content.addView(identity,new LinearLayout.LayoutParams(-1,-2));
 
-        Button photo=btn("📷 Ganti Foto Profil"); content.addView(photo); photo.setOnClickListener(v->chooseProfilePhoto());
-        Button add=btn("➕ Tambah Barang / Jual HP"); content.addView(add); add.setOnClickListener(v->profileAddProduct());
-        Button change=btn("🔐 Ubah Password"); content.addView(change); change.setOnClickListener(v->changePassword());
-        Button account=btn("💾 Data Akun Online"); content.addView(account); account.setOnClickListener(v->saveProfileOnline());
-        Button tx=btn("🧾 Transaksi Saya"); content.addView(tx); tx.setOnClickListener(v->transactions());
-        Button chat=btn("💬 Chat Admin MMC PONSEL"); content.addView(chat); chat.setOnClickListener(v->chatWithAdmin());
-        Button globalChat=btn("🌐 Chat Global — Semua Pengguna"); content.addView(globalChat); globalChat.setOnClickListener(v->solutionGroup());
+        TextView section=tv("Akun & Aktivitas",16); section.setTypeface(null,Typeface.BOLD); section.setTextColor(WHITE); section.setPadding(dp(4),dp(16),dp(4),dp(4)); content.addView(section);
+        profileAction("📷","Foto Profil","Ganti foto profil",()->chooseProfilePhoto());
+        profileAction("➕","Tambah Barang","Jual HP atau barang melalui profil",()->profileAddProduct());
+        profileAction("🔐","Ubah Password","Kelola password akun",()->changePassword());
+        profileAction("💾","Data Akun Online","Simpan dan kelola data akun",()->saveProfileOnline());
+        profileAction("🧾","Transaksi Saya","Lihat transaksi dan pesanan",()->transactions());
+
+        TextView comm=tv("Komunikasi",16); comm.setTypeface(null,Typeface.BOLD); comm.setTextColor(WHITE); comm.setPadding(dp(4),dp(16),dp(4),dp(4)); content.addView(comm);
+        profileAction("💬","Chat Admin","Hubungi admin MMC PONSEL",()->chatWithAdmin());
+        profileAction("🌐","Chat Global","Berkomunikasi dengan pengguna lain",()->solutionGroup());
+        profileAction("🟢","WhatsApp","Hubungi MMC PONSEL",()->openWhatsApp());
+
         if(adminMode){
-            TextView adminNote=tv("🛡 MODE ADMIN\nGunakan panel admin untuk mengelola pengguna, blokir akun, dan menghapus produk.",15);
-            adminNote.setTextColor(YELLOW); adminNote.setBackgroundResource(R.drawable.card); content.addView(adminNote);
-            Button manage=btn("🛡 Buka Panel Admin"); content.addView(manage); manage.setOnClickListener(v->adminPanel());
+            TextView adminSection=tv("Administrasi",16); adminSection.setTypeface(null,Typeface.BOLD); adminSection.setTextColor(YELLOW); adminSection.setPadding(dp(4),dp(16),dp(4),dp(4)); content.addView(adminSection);
+            profileAction("🛡","Panel Admin","Kelola pengguna dan produk",()->adminPanel());
         }else{
-            Button member=btn("👤 Pusat Member"); content.addView(member); member.setOnClickListener(v->memberPanel());
+            profileAction("👤","Pusat Member","Fitur dan informasi member",()->memberPanel());
         }
-        Button wa=btn("Chat WhatsApp MMC PONSEL"); content.addView(wa); wa.setOnClickListener(v->openWhatsApp());
-        Button out=btn(adminMode?"Logout Admin":"Logout"); content.addView(out); out.setOnClickListener(v->logout());
+        profileAction("↪","Keluar","Keluar dari akun ini",()->logout());
 
         db.collection("users").document(u.getUid()).get().addOnSuccessListener(d->{
             String photoUrl=d.getString("photoUrl");
@@ -1007,6 +1053,22 @@ public class MainActivity extends Activity {
                 if(profileAvatar!=null) Glide.with(this).load(photoUrl).placeholder(R.drawable.mmc_logo_4k).circleCrop().into(profileAvatar);
             }
         });
+    }
+
+    void profileAction(String icon,String titleText,String subtitle,Runnable action){
+        LinearLayout row=new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(dp(12),dp(7),dp(10),dp(7));
+        row.setBackgroundResource(R.drawable.profile_row);
+        TextView ic=tv(icon,20); ic.setGravity(Gravity.CENTER); row.addView(ic,new LinearLayout.LayoutParams(dp(38),dp(52)));
+        LinearLayout texts=new LinearLayout(this); texts.setOrientation(LinearLayout.VERTICAL); texts.setGravity(Gravity.CENTER_VERTICAL);
+        TextView t=tv(titleText,15); t.setTypeface(null,Typeface.BOLD); t.setTextColor(WHITE); texts.addView(t);
+        TextView st=tv(subtitle,12); st.setTextColor(MUTED); texts.addView(st);
+        row.addView(texts,new LinearLayout.LayoutParams(0,dp(52),1));
+        TextView arrow=tv("›",25); arrow.setTextColor(MUTED); arrow.setGravity(Gravity.CENTER); row.addView(arrow,new LinearLayout.LayoutParams(dp(30),dp(52)));
+        LinearLayout.LayoutParams rp=new LinearLayout.LayoutParams(-1,dp(68)); rp.setMargins(0,dp(4),0,dp(4)); content.addView(row,rp);
+        row.setOnClickListener(v->action.run());
     }
 
     void changePassword(){
