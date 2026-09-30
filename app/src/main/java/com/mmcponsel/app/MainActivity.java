@@ -49,7 +49,6 @@ import com.facebook.login.LoginManager;
 import com.facebook.login.LoginResult;
 import com.google.android.libraries.identity.googleid.GetGoogleIdOption;
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential;
-import com.google.android.libraries.identity.googleid.GoogleIdTokenParsingException;
 import com.google.firebase.auth.AuthCredential;
 import com.google.firebase.auth.FacebookAuthProvider;
 import com.google.firebase.auth.FirebaseAuth;
@@ -404,12 +403,8 @@ public class MainActivity extends Activity {
     void handleGoogleCredential(Credential credential){
         if(credential instanceof CustomCredential &&
                 GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL.equals(credential.getType())){
-            try {
-                GoogleIdTokenCredential googleCredential=GoogleIdTokenCredential.createFrom(((CustomCredential)credential).getData());
-                firebaseAuthWithGoogle(googleCredential.getIdToken());
-            } catch(GoogleIdTokenParsingException e){
-                Toast.makeText(this,"Token Google tidak valid.",Toast.LENGTH_LONG).show();
-            }
+            GoogleIdTokenCredential googleCredential=GoogleIdTokenCredential.createFrom(((CustomCredential)credential).getData());
+            firebaseAuthWithGoogle(googleCredential.getIdToken());
         } else {
             Toast.makeText(this,"Jenis kredensial Google tidak didukung.",Toast.LENGTH_LONG).show();
         }
