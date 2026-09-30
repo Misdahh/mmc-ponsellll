@@ -78,3 +78,32 @@ exports.ensureMemberRole = onCall(async (request) => {
   await admin.auth().setCustomUserClaims(user.uid, {...(user.customClaims || {}), member: true});
   return {ok: true};
 });
+
+
+// Admin role is granted only to the fixed owner account.
+exports.ensureAdminRole = onCall(async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Login diperlukan.");
+  const user = await admin.auth().getUser(request.auth.uid);
+  if (user.email !== "miss@mmcponsel.app") {
+    throw new HttpsError("permission-denied", "Akun ini bukan akun admin MMC PONSEL.");
+  }
+  await admin.auth().setCustomUserClaims(user.uid, {...(user.customClaims || {}), admin: true});
+  return {ok: true};
+});
+
+// Deletes a Firebase Authentication account and its public profile.
+// Only the owner admin account can call this function.
+exports.adminDeleteUser = onCall(async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Login diperlukan.");
+  const caller = await admin.auth().getUser(request.auth.uid);
+  if (caller.email !== "miss@mmcponsel.app") {
+    throw new HttpsError("permission-denied", "Hanya admin yang boleh menghapus pengguna.");
+  }
+  const uid = String((request.data || {}).uid || "");
+  if (!uid || uid === request.auth.uid) {
+    throw new HttpsError("invalid-argument", "UID pengguna tidak valid.");
+  }
+  await admin.auth().deleteUser(uid);
+  await db.collection("users").doc(uid).delete();
+  return {ok: true};
+});
