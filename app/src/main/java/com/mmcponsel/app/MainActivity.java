@@ -222,7 +222,9 @@ public class MainActivity extends Activity {
 
         title=tv(heading,22); title.setTypeface(Typeface.DEFAULT,Typeface.BOLD);
         mainColumn.addView(title,new LinearLayout.LayoutParams(-1,dp(50)));
-        if("login".equals(currentRoute) || "auth".equals(currentRoute)) {
+        if("home".equals(currentRoute)) {
+            // Beranda memakai navigasi bawah yang lebih rapi.
+        } else if("login".equals(currentRoute) || "auth".equals(currentRoute)) {
             // Halaman login memakai tulisan animasi "miss cinta tuhan" sebagai pengganti "hangat".
             if("login".equals(currentRoute)) {
                 TextView missCinta=tv("miss cinta tuhan",20);
@@ -551,7 +553,7 @@ public class MainActivity extends Activity {
 
     void showAdminLogin(){
         base("🔐 Login Admin MMC PONSEL");
-        content.addView(tv("Akun admin menggunakan Firebase Authentication. Username admin: miss",16));
+        content.addView(tv("Login admin privat menggunakan Firebase Authentication.",16));
         EditText user=field("Username admin");
         EditText pass=field("Password admin");
         pass.setInputType(129);
@@ -760,15 +762,35 @@ public class MainActivity extends Activity {
     void home(){
         base("MMC PONSEL");
         startAmbientSound();
-        TextView online=tv("● ONLINE • Data tersambung ke server",13); online.setTextColor(GREEN); content.addView(online);
-        addWelcomeCard();
-        addDeveloperCard();
-        TextView welcome=tv("Halo, "+sp.getString("name","Pelanggan"),18);welcome.setTextColor(YELLOW);content.addView(welcome);
-        EditText search=field("Cari HP, merek, atau layanan...");content.addView(search);
-        TextView banner=tv("HP BARU • BEKAS • RUSAK\nJUAL BELI & SERVICE\nKatalog dan pesanan tersimpan online",20);banner.setTypeface(null,Typeface.BOLD);banner.setBackgroundResource(R.drawable.card);content.addView(banner);
-        gridMenus();content.addView(tv("Produk dari Server",20));
-        productList=new LinearLayout(this); productList.setOrientation(LinearLayout.VERTICAL); content.addView(productList);
+
+        // Beranda dibuat ringkas seperti aplikasi chat/marketplace modern:
+        // header bersih, pencarian, menu cepat 2 kolom, katalog realtime, dan navigasi bawah.
+        LinearLayout status=new LinearLayout(this);
+        status.setGravity(Gravity.CENTER_VERTICAL);
+        TextView online=tv("● Online",13); online.setTextColor(GREEN);
+        status.addView(online,new LinearLayout.LayoutParams(0,dp(38),1));
+        TextView account=tv(adminMode?"Admin":"Akun",13); account.setGravity(Gravity.CENTER); account.setTextColor(MUTED);
+        status.addView(account,new LinearLayout.LayoutParams(dp(70),dp(38)));
+        content.addView(status);
+
+        EditText search=field("Cari HP, merek, atau layanan...");
+        addCompactField(content,search);
+
+        TextView quickTitle=tv("Menu cepat",18);
+        quickTitle.setTypeface(null,Typeface.BOLD);
+        quickTitle.setTextColor(WHITE);
+        content.addView(quickTitle);
+        gridMenus();
+
+        TextView productsTitle=tv("Produk terbaru",18);
+        productsTitle.setTypeface(null,Typeface.BOLD);
+        productsTitle.setTextColor(WHITE);
+        content.addView(productsTitle);
+        productList=new LinearLayout(this);
+        productList.setOrientation(LinearLayout.VERTICAL);
+        content.addView(productList);
         loadCloudProducts(search);
+        bottom();
     }
 
     void loadCloudProducts(EditText search){
@@ -839,7 +861,30 @@ public class MainActivity extends Activity {
             neonPaint.clearShadowLayer();
         }
     }
-    void gridMenus(){String[][] m={{"📱 HP Baru","Jual HP baru"},{"♻ HP Bekas","HP second berkualitas"},{"🛠 HP Rusak","Sparepart / perbaikan"},{"🔧 Service","Miss Cell"},{"🛒 Jual HP","Jual perangkat Anda"},{"💳 Beli HP","Belanja HP"}}; for(String[] x:m){Button b=btn(x[0]+"\n"+x[1]);b.setTextColor(WHITE);b.setBackgroundResource(R.drawable.card);content.addView(b);if(x[0].contains("Service"))b.setOnClickListener(v->service());else if(x[0].contains("Beli"))b.setOnClickListener(v->category());else if(x[0].contains("Jual"))b.setOnClickListener(v->sell());}}
+    void gridMenus(){
+        String[][] m={{"📱 HP Baru","Jual HP baru"},{"♻ HP Bekas","HP bekas"},{"🛠 HP Rusak","HP rusak"},{"🔧 Service","Service HP"},{"🛒 Jual HP","Jual perangkat"},{"💳 Beli HP","Belanja HP"}};
+        for(int i=0;i<m.length;i+=2){
+            LinearLayout row=new LinearLayout(this);
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            row.setGravity(Gravity.CENTER);
+            for(int j=i;j<Math.min(i+2,m.length);j++){
+                String[] x=m[j];
+                Button b=btn(x[0]+"\n"+x[1]);
+                b.setTextColor(WHITE);
+                b.setTextSize(14);
+                b.setGravity(Gravity.CENTER);
+                b.setBackgroundResource(R.drawable.card);
+                LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,dp(72),1);
+                lp.setMargins(dp(3),dp(3),dp(3),dp(3));
+                row.addView(b,lp);
+                if(x[0].contains("Service")) b.setOnClickListener(v->service());
+                else if(x[0].contains("Beli")) b.setOnClickListener(v->category());
+                else if(x[0].contains("Jual")) b.setOnClickListener(v->sell());
+                else if(x[0].contains("HP Baru") || x[0].contains("HP Bekas") || x[0].contains("HP Rusak")) b.setOnClickListener(v->category());
+            }
+            content.addView(row);
+        }
+    }
     void productCard(String[] p){productCard(p,content);}
     void productCard(String[] p, LinearLayout target){LinearLayout c=new LinearLayout(this);c.setOrientation(LinearLayout.VERTICAL);c.setPadding(dp(8),dp(8),dp(8),dp(8));c.setBackgroundResource(R.drawable.card);TextView n=tv(p[0],17);n.setTypeface(null,Typeface.BOLD);c.addView(n);c.addView(tv(p[1]+" • "+p[2]+" • ⭐ "+p[3],15));Button b=btn("Lihat detail / Tambah keranjang");c.addView(b);b.setOnClickListener(v->detail(p));target.addView(c);}
     void detail(String[] p){
@@ -890,49 +935,6 @@ public class MainActivity extends Activity {
         try{Intent i=new Intent(Intent.ACTION_VIEW,Uri.parse(url));startActivity(i);}catch(Exception e){Toast.makeText(this,"Tidak dapat membuka halaman pembayaran",Toast.LENGTH_LONG).show();}
     }
 
-    void addWelcomeCard(){
-        String name=sp.getString("name","").trim();
-        if(name.isEmpty() && auth!=null && auth.getCurrentUser()!=null && auth.getCurrentUser().getDisplayName()!=null) name=auth.getCurrentUser().getDisplayName().trim();
-        if(name.isEmpty()) name="Sahabat MMC PONSEL";
-        LinearLayout card=new LinearLayout(this);
-        card.setOrientation(LinearLayout.VERTICAL);
-        card.setPadding(dp(14),dp(14),dp(14),dp(14));
-        card.setBackgroundResource(R.drawable.card);
-        TextView h=tv("💛 SELAMAT DATANG DI MMC PONSEL",19);
-        h.setTypeface(null,Typeface.BOLD);
-        h.setTextColor(YELLOW);
-        card.addView(h);
-        TextView msg=tv("Halo, "+name+"!\n\nTerima kasih sudah berkunjung dan mempercayai MMC PONSEL. Kami senang dapat menemani Anda dalam jual beli HP, service, dan kebutuhan perangkat Anda. Semoga pengalaman Anda di aplikasi ini nyaman, mudah, dan menyenangkan.\n\nSalam hangat,\nMiss Cell — Developer & Pencipta MMC PONSEL 💛",15);
-        msg.setTextColor(WHITE);
-        card.addView(msg);
-        content.addView(card);
-        card.setAlpha(0f);
-        card.setTranslationY(dp(12));
-        card.animate().alpha(1f).translationY(0f).setDuration(650).setStartDelay(120).start();
-    }
-
-    void addDeveloperCard(){
-        LinearLayout card=new LinearLayout(this);card.setOrientation(LinearLayout.VERTICAL);card.setPadding(dp(10),dp(10),dp(10),dp(10));card.setBackgroundResource(R.drawable.card);
-        TextView h=tv("👨‍💻 DEVELOPER / PENCIPTA",18);h.setTypeface(null,Typeface.BOLD);h.setTextColor(YELLOW);card.addView(h);
-        ImageView photo=new ImageView(this);
-        photo.setImageResource(R.drawable.developer_miss_cell);
-        photo.setContentDescription("Foto Developer Miss Cell");
-        photo.setScaleType(ImageView.ScaleType.CENTER_CROP);
-        LinearLayout.LayoutParams photoLp=new LinearLayout.LayoutParams(-1,dp(230));
-        photoLp.setMargins(0,dp(8),0,dp(8));
-        card.addView(photo,photoLp);
-        TextView caption=tv("Miss Cell — Developer & Pencipta MMC PONSEL",17);caption.setTypeface(null,Typeface.BOLD);caption.setTextColor(YELLOW);card.addView(caption);
-        card.addView(tv("Terima kasih sudah menggunakan MMC PONSEL.\n\nWhatsApp: 083830655780\nFacebook: misdah\nTikTok: @tegaris82\nYouTube: @tegaris82",15));
-        Button wa=btn("WhatsApp Developer");wa.setTextColor(WHITE);wa.setBackgroundResource(R.drawable.card);card.addView(wa);wa.setOnClickListener(v->openDeveloperWhatsApp());
-        LinearLayout socials=new LinearLayout(this);socials.setOrientation(LinearLayout.HORIZONTAL);
-        Button fb=btn("Facebook");fb.setTextColor(WHITE);fb.setBackgroundResource(R.drawable.card);socials.addView(fb,new LinearLayout.LayoutParams(0,dp(50),1));fb.setOnClickListener(v->openUrl("https://facebook.com/misdah"));
-        Button tk=btn("TikTok");tk.setTextColor(WHITE);tk.setBackgroundResource(R.drawable.card);socials.addView(tk,new LinearLayout.LayoutParams(0,dp(50),1));tk.setOnClickListener(v->openUrl("https://www.tiktok.com/@tegaris82"));
-        Button yt=btn("YouTube");yt.setTextColor(WHITE);yt.setBackgroundResource(R.drawable.card);socials.addView(yt,new LinearLayout.LayoutParams(0,dp(50),1));yt.setOnClickListener(v->openUrl("https://www.youtube.com/@tegaris82"));
-        card.addView(socials);content.addView(card);
-    }
-
-    void openDeveloperWhatsApp(){try{startActivity(new Intent(Intent.ACTION_VIEW,Uri.parse("https://wa.me/6283830655780")));}catch(Exception e){Toast.makeText(this,"WhatsApp tidak tersedia",0).show();}}
-    void openUrl(String url){try{startActivity(new Intent(Intent.ACTION_VIEW,Uri.parse(url)));}catch(Exception e){Toast.makeText(this,"Link tidak dapat dibuka",0).show();}}
     void category(){base("Kategori HP");loadCategoryFromServer();}
     void loadCategoryFromServer(){
         if(db==null)db=FirebaseFirestore.getInstance();
@@ -995,7 +997,6 @@ public class MainActivity extends Activity {
         }else{
             Button member=btn("👤 Pusat Member"); content.addView(member); member.setOnClickListener(v->memberPanel());
         }
-        Button dev=btn("👨‍💻 Developer / Pencipta — Miss Cell"); content.addView(dev); dev.setOnClickListener(v->developerPage());
         Button wa=btn("Chat WhatsApp MMC PONSEL"); content.addView(wa); wa.setOnClickListener(v->openWhatsApp());
         Button out=btn(adminMode?"Logout Admin":"Logout"); content.addView(out); out.setOnClickListener(v->logout());
 
@@ -1054,12 +1055,6 @@ public class MainActivity extends Activity {
 
     void saveProfileOnline(){FirebaseUser u=auth.getCurrentUser();if(u==null)return;EditText address=field("Alamat pengiriman");content.addView(address);Button save=btn("Simpan ke Server");content.addView(save);save.setOnClickListener(v->{db.collection("users").document(u.getUid()).set(new java.util.HashMap<String,Object>(){{put("uid",u.getUid());put("name",u.getDisplayName());put("email",u.getEmail());put("address",address.getText().toString().trim());put("updatedAt",FieldValue.serverTimestamp());}},com.google.firebase.firestore.SetOptions.merge()).addOnSuccessListener(x->Toast.makeText(this,"Profil tersimpan online",Toast.LENGTH_SHORT).show());});}
     void transactions(){base("Transaksi Online");FirebaseUser u=auth==null?null:auth.getCurrentUser();if(u==null){showLogin();return;}content.addView(tv("Pesanan",19));db.collection("orders").whereEqualTo("uid",u.getUid()).get().addOnSuccessListener(s->{if(s.isEmpty())content.addView(tv("Belum ada pesanan.",15));for(DocumentSnapshot d:s.getDocuments())content.addView(tv((d.getString("productName")==null?"":d.getString("productName"))+"\n"+(d.getString("price")==null?"":d.getString("price"))+"\nStatus: "+(d.getString("status")==null?"":d.getString("status")),16));});content.addView(tv("Service",19));db.collection("serviceRequests").whereEqualTo("uid",u.getUid()).get().addOnSuccessListener(s->{if(s.isEmpty())content.addView(tv("Belum ada permintaan service.",15));for(DocumentSnapshot d:s.getDocuments())content.addView(tv("🔧 "+d.getString("type")+"\nStatus: "+d.getString("status"),16));});}
-
-    void developerPage(){
-        base("👨‍💻 Developer — Miss Cell");
-        addDeveloperCard();
-        TextView info=tv("Hubungi developer untuk bantuan aplikasi, pengembangan fitur, integrasi server, atau kerja sama.",15);info.setTextColor(MUTED);content.addView(info);
-    }
 
     void logout(){try{if(auth!=null)auth.signOut();LoginManager.getInstance().logOut();}catch(Exception ignored){}adminMode=false;memberMode=false;sp.edit().clear().apply();showLogin();}
 
