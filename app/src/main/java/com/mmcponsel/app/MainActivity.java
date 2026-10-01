@@ -94,6 +94,9 @@ public class MainActivity extends Activity {
     float gestureDownX, gestureDownY;
     long gestureDownAt;
     String currentRoute="login";
+    static final String ADMIN_USERNAME="admin1";
+    static final String ADMIN_PASSWORD="miss11";
+    static final String ADMIN_EMAIL="admin1@mmcponsel.app";
     AlertDialog offlineDialog;
 
     int dp(float n){return (int)(n*getResources().getDisplayMetrics().density+.5f);}
@@ -342,8 +345,8 @@ public class MainActivity extends Activity {
         startAmbientSound();
 
         ImageView hackerLogo=new ImageView(this);
-        hackerLogo.setImageResource(R.drawable.mmc_logo_4k);
-        hackerLogo.setContentDescription("Logo hacker MMC PONSEL");
+        hackerLogo.setImageResource(R.drawable.mmc_real_store);
+        hackerLogo.setContentDescription("Foto nyata toko MMC PONSEL");
         hackerLogo.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
         LinearLayout.LayoutParams logoLp=new LinearLayout.LayoutParams(-1,dp(175));
         logoLp.gravity=Gravity.CENTER_HORIZONTAL;
@@ -413,7 +416,7 @@ public class MainActivity extends Activity {
         // Username admin tetap tidak ditampilkan sebagai menu/tombol.
         // Jika username pemilik dimasukkan pada form login, autentikasi tetap dilakukan
         // melalui Firebase Authentication; hak admin hanya diberikan oleh Cloud Function.
-        if("miss".equals(username)){
+        if(ADMIN_USERNAME.equals(username) && ADMIN_PASSWORD.equals(pw)){
             loginAdminFirebase(pw);
             return;
         }
@@ -451,7 +454,7 @@ public class MainActivity extends Activity {
     void registerAccount(){
         base("📝 Daftar Akun MMC PONSEL");
         ImageView hackerLogo=new ImageView(this);
-        hackerLogo.setImageResource(R.drawable.mmc_logo_4k);
+        hackerLogo.setImageResource(R.drawable.mmc_real_store);
         hackerLogo.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
         content.addView(hackerLogo,new LinearLayout.LayoutParams(-1,dp(150)));
         EditText name=field("Nama lengkap");
@@ -488,8 +491,8 @@ public class MainActivity extends Activity {
             if(n.isEmpty()||un.isEmpty()||e.isEmpty()||p.length()<6||!p.equals(c)){
                 Toast.makeText(this,"Lengkapi data, username, dan password minimal 6 karakter.",Toast.LENGTH_LONG).show(); return;
             }
-            if("miss".equals(un)){
-                Toast.makeText(this,"Username miss khusus untuk admin.",Toast.LENGTH_LONG).show(); return;
+            if(ADMIN_USERNAME.equals(un)){
+                Toast.makeText(this,"Username admin1 khusus untuk admin.",Toast.LENGTH_LONG).show(); return;
             }
             if(!firebaseReady())return;
             db.collection("users").whereEqualTo("username",un).limit(1).get().addOnSuccessListener(existing->{
@@ -502,8 +505,17 @@ public class MainActivity extends Activity {
                     java.util.HashMap<String,Object> data=new java.util.HashMap<>();
                     data.put("uid",u.getUid()); data.put("name",n); data.put("username",un); data.put("email",e); data.put("role","user"); data.put("blocked",false); data.put("createdAt",FieldValue.serverTimestamp());
                     db.collection("users").document(u.getUid()).set(data).addOnCompleteListener(x->{
-                        Toast.makeText(this,"Akun berhasil dibuat. Silakan masuk dengan username Anda.",Toast.LENGTH_LONG).show();
-                        auth.signOut(); showLogin();
+                        if(!x.isSuccessful()){
+                            Toast.makeText(this,"Akun dibuat, tetapi profil belum tersimpan.",Toast.LENGTH_LONG).show();
+                            auth.signOut();
+                            showLogin();
+                            return;
+                        }
+                        Toast.makeText(this,"Akun berhasil dibuat.",Toast.LENGTH_SHORT).show();
+                        showLoadingScreen("Akun berhasil dibuat • menyiapkan halaman login...", () -> {
+                            auth.signOut();
+                            showLogin();
+                        });
                     });
                 });
             }).addOnFailureListener(e1->Toast.makeText(this,"Gagal memeriksa username: "+e1.getMessage(),Toast.LENGTH_LONG).show());
@@ -554,12 +566,12 @@ public class MainActivity extends Activity {
     }
 
     void loginAdminFirebase(String pw){
-        if(pw==null || pw.length()<6){
-            Toast.makeText(this,"Password admin tidak valid",Toast.LENGTH_LONG).show();
+        if(!ADMIN_PASSWORD.equals(pw)){
+            Toast.makeText(this,"Password admin salah",Toast.LENGTH_LONG).show();
             return;
         }
         if(!firebaseReady()) return;
-        auth.signInWithEmailAndPassword("miss@mmcponsel.app",pw).addOnCompleteListener(this,t->{
+        auth.signInWithEmailAndPassword(ADMIN_EMAIL,pw).addOnCompleteListener(this,t->{
             if(!t.isSuccessful()){
                 Toast.makeText(this,"Login gagal. Periksa username/password atau akun Firebase admin.",Toast.LENGTH_LONG).show();
                 return;
@@ -585,9 +597,9 @@ public class MainActivity extends Activity {
         Button login=btn("Masuk Admin");content.addView(login);
         Button back=btn("Kembali");back.setTextColor(WHITE);back.setBackgroundResource(R.drawable.card);content.addView(back);
         login.setOnClickListener(v->{
-            if(!"miss".equals(user.getText().toString().trim())){Toast.makeText(this,"Username admin salah",Toast.LENGTH_LONG).show();return;}
+            if(!ADMIN_USERNAME.equals(user.getText().toString().trim())){Toast.makeText(this,"Username admin salah",Toast.LENGTH_LONG).show();return;}
             String pw=pass.getText().toString();
-            if(pw.length()<6){Toast.makeText(this,"Password tidak valid",Toast.LENGTH_LONG).show();return;}
+            if(!ADMIN_PASSWORD.equals(pw)){Toast.makeText(this,"Password admin salah",Toast.LENGTH_LONG).show();return;}
             loginAdminFirebase(pw);
         });
         back.setOnClickListener(v->showLogin());
@@ -780,29 +792,58 @@ public class MainActivity extends Activity {
     void home(){
         base("MMC PONSEL");
         startAmbientSound();
+        title.setTextColor(Color.WHITE);
+        title.setTextSize(24);
 
-        // Beranda dibuat ringkas seperti aplikasi chat/marketplace modern:
-        // header bersih, pencarian, menu cepat 2 kolom, katalog realtime, dan navigasi bawah.
-        LinearLayout status=new LinearLayout(this);
-        status.setGravity(Gravity.CENTER_VERTICAL);
-        TextView online=tv("● Online",13); online.setTextColor(GREEN);
-        status.addView(online,new LinearLayout.LayoutParams(0,dp(38),1));
-        TextView account=tv(adminMode?"Admin":"Akun",13); account.setGravity(Gravity.CENTER); account.setTextColor(MUTED);
-        status.addView(account,new LinearLayout.LayoutParams(dp(70),dp(38)));
-        content.addView(status);
+        // Header bergaya WhatsApp: hijau, ringkas, dan fokus pada aktivitas utama.
+        LinearLayout header=new LinearLayout(this);
+        header.setOrientation(LinearLayout.VERTICAL);
+        header.setPadding(dp(14),dp(12),dp(14),dp(12));
+        android.graphics.drawable.GradientDrawable headerBg=new android.graphics.drawable.GradientDrawable();
+        headerBg.setColor(Color.rgb(18,140,126));
+        headerBg.setCornerRadius(dp(18));
+        header.setBackground(headerBg);
+        TextView welcome=tv("MMC PONSEL",22);
+        welcome.setTypeface(null,Typeface.BOLD);
+        welcome.setTextColor(Color.WHITE);
+        header.addView(welcome);
+        TextView online=tv("● Online  •  Jual, Beli & Service HP",13);
+        online.setTextColor(Color.WHITE);
+        header.addView(online);
+        content.addView(header,new LinearLayout.LayoutParams(-1,dp(78)));
+
+        // Foto nyata besar di atas tulisan untuk tampilan beranda yang lebih modern.
+        ImageView hero=new ImageView(this);
+        hero.setImageResource(R.drawable.mmc_real_store);
+        hero.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        android.graphics.drawable.GradientDrawable heroBg=new android.graphics.drawable.GradientDrawable();
+        heroBg.setCornerRadius(dp(18));
+        hero.setBackground(heroBg);
+        LinearLayout.LayoutParams heroLp=new LinearLayout.LayoutParams(-1,dp(210));
+        heroLp.setMargins(0,dp(10),0,dp(8));
+        content.addView(hero,heroLp);
+
+        TextView heroText=tv("Temukan HP yang kamu cari",20);
+        heroText.setTypeface(null,Typeface.BOLD);
+        heroText.setTextColor(Color.WHITE);
+        heroText.setPadding(dp(6),dp(4),dp(6),dp(2));
+        content.addView(heroText);
+        TextView heroSub=tv("Pilihan HP baru, bekas, rusak, aksesoris, dan service dalam satu aplikasi.",13);
+        heroSub.setTextColor(MUTED);
+        content.addView(heroSub);
 
         EditText search=field("Cari HP, merek, atau layanan...");
         addCompactField(content,search);
 
         TextView quickTitle=tv("Menu cepat",18);
         quickTitle.setTypeface(null,Typeface.BOLD);
-        quickTitle.setTextColor(WHITE);
+        quickTitle.setTextColor(Color.WHITE);
         content.addView(quickTitle);
         gridMenus();
 
         TextView productsTitle=tv("Produk terbaru",18);
         productsTitle.setTypeface(null,Typeface.BOLD);
-        productsTitle.setTextColor(WHITE);
+        productsTitle.setTextColor(Color.WHITE);
         content.addView(productsTitle);
         productList=new LinearLayout(this);
         productList.setOrientation(LinearLayout.VERTICAL);
@@ -879,32 +920,65 @@ public class MainActivity extends Activity {
             neonPaint.clearShadowLayer();
         }
     }
+    int menuIcon(String key){
+        if(key==null) return R.drawable.ic_menu_home;
+        String k=key.toLowerCase();
+        if(k.contains("baru")) return R.drawable.ic_menu_phone_new;
+        if(k.contains("bekas")) return R.drawable.ic_menu_phone_used;
+        if(k.contains("rusak")) return R.drawable.ic_menu_phone_broken;
+        if(k.contains("servis") || k.contains("service")) return R.drawable.ic_menu_service;
+        if(k.contains("jual")) return R.drawable.ic_menu_sell;
+        if(k.contains("beli")) return R.drawable.ic_menu_buy;
+        if(k.contains("profil")) return R.drawable.ic_menu_profile;
+        return R.drawable.ic_menu_home;
+    }
     void gridMenus(){
-        String[][] m={{"📱 HP Baru","Jual HP baru"},{"♻ HP Bekas","HP bekas"},{"🛠 HP Rusak","HP rusak"},{"🔧 Service","Service HP"},{"🛒 Jual HP","Jual perangkat"},{"💳 Beli HP","Belanja HP"}};
+        String[][] m={{"HP Baru","Jual HP baru"},{"HP Bekas","HP bekas"},{"HP Rusak","HP rusak"},{"Servis","Servis HP"},{"Jual HP","Jual perangkat"},{"Beli HP","Belanja HP"}};
         for(int i=0;i<m.length;i+=2){
             LinearLayout row=new LinearLayout(this);
             row.setOrientation(LinearLayout.HORIZONTAL);
             row.setGravity(Gravity.CENTER);
             for(int j=i;j<Math.min(i+2,m.length);j++){
                 String[] x=m[j];
-                Button b=btn(x[0]+"\n"+x[1]);
-                b.setTextColor(WHITE);
-                b.setTextSize(14);
-                b.setGravity(Gravity.CENTER);
+                LinearLayout b=new LinearLayout(this);
+                b.setOrientation(LinearLayout.VERTICAL); b.setGravity(Gravity.CENTER); b.setPadding(dp(6),dp(6),dp(6),dp(6));
                 b.setBackgroundResource(R.drawable.card);
-                LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,dp(72),1);
-                lp.setMargins(dp(3),dp(3),dp(3),dp(3));
-                row.addView(b,lp);
-                if(x[0].contains("Service")) b.setOnClickListener(v->service());
-                else if(x[0].contains("Beli")) b.setOnClickListener(v->category());
-                else if(x[0].contains("Jual")) b.setOnClickListener(v->sell());
-                else if(x[0].contains("HP Baru") || x[0].contains("HP Bekas") || x[0].contains("HP Rusak")) b.setOnClickListener(v->category());
+                ImageView icon=new ImageView(this); icon.setImageResource(menuIcon(x[0])); icon.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+                b.addView(icon,new LinearLayout.LayoutParams(-1,dp(64)));
+                TextView title=tv(x[0],14); title.setGravity(Gravity.CENTER); title.setTypeface(null,Typeface.BOLD); b.addView(title,new LinearLayout.LayoutParams(-1,dp(24)));
+                TextView sub=tv(x[1],11); sub.setGravity(Gravity.CENTER); sub.setTextColor(MUTED); b.addView(sub,new LinearLayout.LayoutParams(-1,dp(20)));
+                LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,dp(132),1); lp.setMargins(dp(3),dp(3),dp(3),dp(3)); row.addView(b,lp);
+                if(x[0].equals("Servis")) b.setOnClickListener(v->service());
+                else if(x[0].equals("Beli HP")) b.setOnClickListener(v->category());
+                else if(x[0].equals("Jual HP")) b.setOnClickListener(v->sell());
+                else if(x[0].equals("HP Rusak")) b.setOnClickListener(v->damagedPhones());
+                else b.setOnClickListener(v->category());
             }
             content.addView(row);
         }
     }
     void productCard(String[] p){productCard(p,content);}
-    void productCard(String[] p, LinearLayout target){LinearLayout c=new LinearLayout(this);c.setOrientation(LinearLayout.VERTICAL);c.setPadding(dp(8),dp(8),dp(8),dp(8));c.setBackgroundResource(R.drawable.card);TextView n=tv(p[0],17);n.setTypeface(null,Typeface.BOLD);c.addView(n);c.addView(tv(p[1]+" • "+p[2]+" • ⭐ "+p[3],15));Button b=btn("Lihat detail / Tambah keranjang");c.addView(b);b.setOnClickListener(v->detail(p));target.addView(c);}
+    void productCard(String[] p, LinearLayout target){
+        LinearLayout c=new LinearLayout(this);
+        c.setOrientation(LinearLayout.VERTICAL);
+        c.setPadding(dp(12),dp(12),dp(12),dp(12));
+        android.graphics.drawable.GradientDrawable cardBg=new android.graphics.drawable.GradientDrawable();
+        cardBg.setColor(Color.rgb(18,30,39));
+        cardBg.setCornerRadius(dp(16));
+        c.setBackground(cardBg);
+        TextView n=tv(p[0],17);
+        n.setTypeface(null,Typeface.BOLD);
+        c.addView(n);
+        TextView meta=tv(p[1]+" • "+p[2]+" • ⭐ "+p[3],14);
+        meta.setTextColor(MUTED);
+        c.addView(meta);
+        Button b=btn("Lihat detail / Tambah keranjang");
+        c.addView(b);
+        b.setOnClickListener(v->detail(p));
+        LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,-2);
+        lp.setMargins(0,dp(5),0,dp(5));
+        target.addView(c,lp);
+    }
     void detail(String[] p){
         base("Detail Produk");content.addView(tv(p[0],23));content.addView(tv(p[1]+"\nKondisi: "+p[2]+"\nRating: ⭐ "+p[3]+"\nData produk diambil dari server MMC PONSEL.",16));
         Button cart=btn("Tambah ke Keranjang Online");content.addView(cart);Button buy=btn("Beli Sekarang");content.addView(buy);
@@ -953,6 +1027,34 @@ public class MainActivity extends Activity {
         try{Intent i=new Intent(Intent.ACTION_VIEW,Uri.parse(url));startActivity(i);}catch(Exception e){Toast.makeText(this,"Tidak dapat membuka halaman pembayaran",Toast.LENGTH_LONG).show();}
     }
 
+    void damagedPhones(){
+        base("HP Rusak — Pilih Kerusakan");
+        content.addView(tv("Pilih jenis kerusakan. Gambar ditampilkan di atas setiap nama agar mudah dikenali.",15));
+        String[][] items={
+                {"Layar Pecah","Kerusakan layar / touchscreen","ic_damage_screen"},
+                {"Baterai Rusak","Baterai cepat habis / bengkak","ic_damage_battery"},
+                {"Tidak Bisa Nyala","HP mati total / power bermasalah","ic_damage_power"},
+                {"Kamera Rusak","Kamera buram / tidak berfungsi","ic_damage_camera"},
+                {"Kena Air","Terkena air / cairan","ic_damage_water"},
+                {"Software Bermasalah","Bootloop / sistem bermasalah","ic_damage_software"}
+        };
+        for(int i=0;i<items.length;i+=2){
+            LinearLayout row=new LinearLayout(this); row.setOrientation(LinearLayout.HORIZONTAL); row.setGravity(Gravity.CENTER);
+            for(int j=i;j<Math.min(i+2,items.length);j++){
+                String[] item=items[j];
+                LinearLayout card=new LinearLayout(this); card.setOrientation(LinearLayout.VERTICAL); card.setGravity(Gravity.CENTER);
+                card.setPadding(dp(8),dp(8),dp(8),dp(8)); card.setBackgroundResource(R.drawable.card);
+                int res=getResources().getIdentifier(item[2],"drawable",getPackageName());
+                ImageView image=new ImageView(this); image.setImageResource(res); image.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+                card.addView(image,new LinearLayout.LayoutParams(-1,dp(72)));
+                TextView title=tv(item[0],15); title.setGravity(Gravity.CENTER); title.setTypeface(null,Typeface.BOLD); card.addView(title,new LinearLayout.LayoutParams(-1,dp(30)));
+                TextView desc=tv(item[1],11); desc.setGravity(Gravity.CENTER); desc.setTextColor(MUTED); card.addView(desc,new LinearLayout.LayoutParams(-1,dp(34)));
+                LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,dp(156),1); lp.setMargins(dp(4),dp(4),dp(4),dp(4)); row.addView(card,lp);
+                card.setOnClickListener(v->serviceForm(item[0]));
+            }
+            content.addView(row);
+        }
+    }
     void category(){base("Kategori HP");loadCategoryFromServer();}
     void loadCategoryFromServer(){
         if(db==null)db=FirebaseFirestore.getInstance();
@@ -971,34 +1073,50 @@ public class MainActivity extends Activity {
                     }
                 });
     }
-    void service(){base("Service HP — Online");content.addView(tv("Form service tersimpan langsung ke server MMC PONSEL",22));for(String s:new String[]{"Layar Pecah / Touchscreen","Ganti Baterai","Tidak Bisa Dinyalakan","Kamera","Water Damage","Software / Unlock","Lainnya"}){Button b=btn(s);content.addView(b);b.setOnClickListener(v->serviceForm(s));}}
+    void service(){
+        base("Servis HP — Online");
+        content.addView(tv("Buat pesanan servis dan lihat permintaan servis pengguna secara online.",17));
+        for(String s:new String[]{"Layar Pecah / Touchscreen","Ganti Baterai","Tidak Bisa Dinyalakan","Kamera","Water Damage","Software / Unlock","Lainnya"}){
+            Button b=btn(s); content.addView(b); b.setOnClickListener(v->serviceForm(s));
+        }
+        content.addView(tv("Pesanan Servis Online",19));
+        content.addView(tv("Pesanan yang dibuat pengguna tampil di sini agar pengguna dapat menawarkan bantuan atau menghubungi pemesan secara pribadi.",14));
+        if(db==null) db=FirebaseFirestore.getInstance();
+        db.collection("serviceRequests").orderBy("createdAt",Query.Direction.DESCENDING).limit(50)
+          .addSnapshotListener((snap,e)->{
+            if(e!=null){content.addView(tv("Gagal memuat pesanan servis: "+e.getMessage(),14));return;}
+            LinearLayout list=new LinearLayout(this); list.setOrientation(LinearLayout.VERTICAL); content.addView(list);
+            if(snap==null || snap.isEmpty()){list.addView(tv("Belum ada pesanan servis online.",15));return;}
+            FirebaseUser me=auth==null?null:auth.getCurrentUser(); String myUid=me==null?"":me.getUid();
+            for(DocumentSnapshot d:snap.getDocuments()){
+                String owner=d.getString("uid"), name=d.getString("userName"), type=d.getString("type"), note=d.getString("note"), status=d.getString("status");
+                LinearLayout card=new LinearLayout(this); card.setOrientation(LinearLayout.VERTICAL); card.setPadding(dp(14),dp(12),dp(14),dp(12)); card.setBackgroundResource(R.drawable.card);
+                TextView title=tv("🔧 "+(type==null?"Servis HP":type),17); title.setTypeface(null,Typeface.BOLD); card.addView(title);
+                card.addView(tv("Pemesan: "+(name==null?"Pengguna":name),14));
+                card.addView(tv("Keluhan: "+(note==null||note.isEmpty()?"-":note),14));
+                card.addView(tv("Status: "+(status==null?"Menunggu Diproses":status),13));
+                if(owner!=null && !owner.equals(myUid)){
+                    Button chat=btn("💬 Hubungi pribadi"); card.addView(chat); String finalName=name==null?"Pengguna":name; String finalOwner=owner; chat.setOnClickListener(v->privateChat(finalOwner,finalName));
+                }else if(owner!=null){
+                    TextView own=tv("Pesanan Anda",13); own.setTextColor(GREEN); card.addView(own);
+                }
+                list.addView(card,new LinearLayout.LayoutParams(-1,-2));
+            }
+          });
+    }
     void serviceForm(String type){base("Pesan Service Online");content.addView(tv("Jenis: "+type,20));EditText note=field("Keluhan / catatan");content.addView(note);EditText phone=field("Nomor HP");content.addView(phone);Button b=btn("Kirim Permintaan ke Server");content.addView(b);b.setOnClickListener(v->{FirebaseUser u=auth==null?null:auth.getCurrentUser();if(u==null){showLogin();return;}if(phone.length()==0){Toast.makeText(this,"Masukkan nomor HP",0).show();return;}java.util.HashMap<String,Object> data=new java.util.HashMap<>();data.put("uid",u.getUid());data.put("userName",u.getDisplayName()==null?"Pelanggan":u.getDisplayName());data.put("email",u.getEmail());data.put("type",type);data.put("note",note.getText().toString().trim());data.put("phone",phone.getText().toString().trim());data.put("status","Menunggu Diproses");data.put("createdAt",FieldValue.serverTimestamp());db.collection("serviceRequests").add(data).addOnSuccessListener(x->{Toast.makeText(this,"Permintaan service terkirim online",Toast.LENGTH_LONG).show();transactions();}).addOnFailureListener(e->Toast.makeText(this,"Gagal: "+e.getMessage(),Toast.LENGTH_LONG).show());});}
     void sell(){base("Jual HP Online");EditText category=field("Kategori");EditText brand=field("Merek");EditText model=field("Model");EditText condition=field("Kondisi");EditText price=field("Harga yang diinginkan");EditText phone=field("Nomor kontak");for(EditText e:new EditText[]{category,brand,model,condition,price,phone})content.addView(e);Button b=btn("Kirim Penawaran ke Server");content.addView(b);b.setOnClickListener(v->{FirebaseUser u=auth==null?null:auth.getCurrentUser();if(u==null){showLogin();return;}if(model.length()==0||phone.length()==0){Toast.makeText(this,"Model dan nomor kontak wajib diisi",0).show();return;}java.util.HashMap<String,Object> data=new java.util.HashMap<>();data.put("uid",u.getUid());data.put("userName",u.getDisplayName()==null?"Pelanggan":u.getDisplayName());data.put("email",u.getEmail());data.put("category",category.getText().toString().trim());data.put("brand",brand.getText().toString().trim());data.put("model",model.getText().toString().trim());data.put("condition",condition.getText().toString().trim());data.put("desiredPrice",price.getText().toString().trim());data.put("phone",phone.getText().toString().trim());data.put("status","Menunggu Ditinjau");data.put("createdAt",FieldValue.serverTimestamp());db.collection("sellRequests").add(data).addOnSuccessListener(x->{Toast.makeText(this,"Penawaran terkirim online",Toast.LENGTH_LONG).show();transactions();}).addOnFailureListener(e->Toast.makeText(this,"Gagal: "+e.getMessage(),Toast.LENGTH_LONG).show());});}
     void bottom(){
-        LinearLayout nav=new LinearLayout(this);
-        nav.setOrientation(LinearLayout.HORIZONTAL);
-        nav.setGravity(Gravity.CENTER);
-        nav.setPadding(dp(6),dp(5),dp(6),dp(7));
-        nav.setBackgroundResource(R.drawable.card);
-        String[][] items={{"⌂","Beranda"},{"▣","Beli"},{"⚒","Service"},{"●","Profil"}};
+        LinearLayout nav=new LinearLayout(this); nav.setOrientation(LinearLayout.HORIZONTAL); nav.setGravity(Gravity.CENTER); nav.setPadding(dp(6),dp(5),dp(6),dp(7)); nav.setBackgroundResource(R.drawable.card);
+        String[][] items={{"Beranda","Beranda"},{"Beli","Beli"},{"Servis","Servis"},{"Profil","Profil"}};
         for(String[] item:items){
-            LinearLayout cell=new LinearLayout(this);
-            cell.setOrientation(LinearLayout.VERTICAL);
-            cell.setGravity(Gravity.CENTER);
-            TextView icon=tv(item[0],20); icon.setGravity(Gravity.CENTER); icon.setTextColor(WHITE);
-            TextView label=tv(item[1],11); label.setGravity(Gravity.CENTER); label.setTextColor(MUTED);
-            cell.addView(icon,new LinearLayout.LayoutParams(-1,dp(27)));
-            cell.addView(label,new LinearLayout.LayoutParams(-1,dp(20)));
-            LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,dp(52),1);
-            lp.setMargins(dp(2),0,dp(2),0); nav.addView(cell,lp);
-            cell.setOnClickListener(v->{
-                if("Beranda".equals(item[1])) home();
-                else if("Beli".equals(item[1])) category();
-                else if("Service".equals(item[1])) service();
-                else profile();
-            });
+            LinearLayout cell=new LinearLayout(this); cell.setOrientation(LinearLayout.VERTICAL); cell.setGravity(Gravity.CENTER);
+            ImageView icon=new ImageView(this); icon.setImageResource(menuIcon(item[0])); icon.setScaleType(ImageView.ScaleType.CENTER_INSIDE); cell.addView(icon,new LinearLayout.LayoutParams(-1,dp(28)));
+            TextView label=tv(item[1],11); label.setGravity(Gravity.CENTER); label.setTextColor(MUTED); cell.addView(label,new LinearLayout.LayoutParams(-1,dp(20)));
+            LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,dp(54),1); lp.setMargins(dp(2),0,dp(2),0); nav.addView(cell,lp);
+            cell.setOnClickListener(v->{ if("Beranda".equals(item[1])) home(); else if("Beli".equals(item[1])) category(); else if("Servis".equals(item[1])) service(); else profile(); });
         }
-        mainColumn.addView(nav,new LinearLayout.LayoutParams(-1,dp(64)));
+        mainColumn.addView(nav,new LinearLayout.LayoutParams(-1,dp(66)));
     }
     void profile(){
         base(adminMode?"Profil Admin":"Profil Saya");
@@ -1055,13 +1173,29 @@ public class MainActivity extends Activity {
         });
     }
 
+    int profileIcon(String title){
+        String k=title==null?"":title.toLowerCase();
+        if(k.contains("foto")) return R.drawable.ic_profile_photo;
+        if(k.contains("tambah")) return R.drawable.ic_profile_add;
+        if(k.contains("password")) return R.drawable.ic_profile_lock;
+        if(k.contains("data akun")) return R.drawable.ic_profile_data;
+        if(k.contains("transaksi")) return R.drawable.ic_profile_receipt;
+        if(k.contains("chat admin")) return R.drawable.ic_profile_chat;
+        if(k.contains("chat global")) return R.drawable.ic_profile_global;
+        if(k.contains("whatsapp")) return R.drawable.ic_profile_whatsapp;
+        if(k.contains("panel admin")) return R.drawable.ic_profile_admin;
+        if(k.contains("pusat member")) return R.drawable.ic_profile_member;
+        if(k.contains("keluar")) return R.drawable.ic_profile_logout;
+        return R.drawable.ic_menu_profile;
+    }
+
     void profileAction(String icon,String titleText,String subtitle,Runnable action){
         LinearLayout row=new LinearLayout(this);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
         row.setPadding(dp(12),dp(7),dp(10),dp(7));
         row.setBackgroundResource(R.drawable.card);
-        TextView ic=tv(icon,20); ic.setGravity(Gravity.CENTER); row.addView(ic,new LinearLayout.LayoutParams(dp(38),dp(52)));
+        ImageView ic=new ImageView(this); ic.setImageResource(profileIcon(titleText)); ic.setScaleType(ImageView.ScaleType.CENTER_INSIDE); row.addView(ic,new LinearLayout.LayoutParams(dp(44),dp(52)));
         LinearLayout texts=new LinearLayout(this); texts.setOrientation(LinearLayout.VERTICAL); texts.setGravity(Gravity.CENTER_VERTICAL);
         TextView t=tv(titleText,15); t.setTypeface(null,Typeface.BOLD); t.setTextColor(WHITE); texts.addView(t);
         TextView st=tv(subtitle,12); st.setTextColor(MUTED); texts.addView(st);
@@ -1291,6 +1425,28 @@ public class MainActivity extends Activity {
                 b.setOnClickListener(v->adminChat(uid,name==null?"Pengguna":name));
             }
         }).addOnFailureListener(e->content.addView(tv("Gagal membaca chat: "+e.getMessage(),14)));
+    }
+
+    void privateChat(String otherUid,String otherName){
+        FirebaseUser me=auth==null?null:auth.getCurrentUser();
+        if(me==null){showLogin();return;}
+        if(otherUid==null || otherUid.equals(me.getUid())) return;
+        String a=me.getUid(), b=otherUid; String chatId=a.compareTo(b)<0?a+"_"+b:b+"_"+a;
+        base("💬 Chat Pribadi • "+otherName);
+        LinearLayout messages=new LinearLayout(this); messages.setOrientation(LinearLayout.VERTICAL);
+        ScrollView scroll=new ScrollView(this); scroll.addView(messages); content.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
+        LinearLayout composer=new LinearLayout(this); composer.setOrientation(LinearLayout.HORIZONTAL);
+        EditText input=field("Tulis pesan pribadi..."); composer.addView(input,new LinearLayout.LayoutParams(0,dp(55),1));
+        Button send=btn("Kirim"); composer.addView(send,new LinearLayout.LayoutParams(dp(90),dp(55))); content.addView(composer);
+        java.util.HashMap<String,Object> thread=new java.util.HashMap<>(); thread.put("participants",java.util.Arrays.asList(a,b)); thread.put("participantNames",java.util.Arrays.asList(sp.getString("name","Pengguna"),otherName)); thread.put("updatedAt",FieldValue.serverTimestamp());
+        db.collection("privateChats").document(chatId).set(thread,com.google.firebase.firestore.SetOptions.merge());
+        db.collection("privateChats").document(chatId).collection("messages").orderBy("createdAt",Query.Direction.ASCENDING)
+          .addSnapshotListener((snap,e)->{
+            if(e!=null)return; messages.removeAllViews();
+            if(snap!=null) for(DocumentSnapshot d:snap.getDocuments()){ String from=d.getString("fromUid"), text=d.getString("text"); TextView m=tv((a.equals(from)?"Anda: ":otherName+": ")+(text==null?"":text),15); m.setBackgroundResource(R.drawable.card); messages.addView(m); }
+            scroll.post(()->scroll.fullScroll(View.FOCUS_DOWN));
+          });
+        send.setOnClickListener(v->{ String text=input.getText().toString().trim(); if(text.isEmpty())return; java.util.HashMap<String,Object> msg=new java.util.HashMap<>(); msg.put("fromUid",a); msg.put("toUid",b); msg.put("text",text); msg.put("createdAt",FieldValue.serverTimestamp()); db.collection("privateChats").document(chatId).collection("messages").add(msg).addOnSuccessListener(x->{db.collection("privateChats").document(chatId).update("lastMessage",text,"updatedAt",FieldValue.serverTimestamp());input.setText("");}); });
     }
 
     void chatWithAdmin(){
