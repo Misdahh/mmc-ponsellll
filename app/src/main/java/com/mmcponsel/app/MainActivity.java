@@ -586,7 +586,7 @@ public class MainActivity extends Activity {
                     })
                     .addOnFailureListener(e->{
                         if(auth!=null) auth.signOut();
-                        Toast.makeText(this,"Login berhasil, tetapi hak admin belum aktif: "+e.getMessage(),Toast.LENGTH_LONG).show();
+                        Toast.makeText(this,"Login berhasil, tetapi hak admin belum aktif. Pastikan fungsi ensureAdminRole versi terbaru sudah di-deploy ke Firebase.",Toast.LENGTH_LONG).show();
                         showLogin();
                     });
         });
