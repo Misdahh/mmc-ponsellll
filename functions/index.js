@@ -84,8 +84,12 @@ exports.ensureMemberRole = onCall(async (request) => {
 exports.ensureAdminRole = onCall(async (request) => {
   if (!request.auth) throw new HttpsError("unauthenticated", "Login diperlukan.");
   const user = await admin.auth().getUser(request.auth.uid);
-  if (user.email !== "admin1@mmcponsel.app" || !user.emailVerified) {
-    throw new HttpsError("permission-denied", "Akun admin Firebase tidak valid atau email belum terverifikasi.");
+  // Admin is identified by the fixed Firebase Authentication email.
+  // Email verification is intentionally NOT required because the owner may
+  // create the account directly from Firebase Console. A valid Firebase
+  // password login already proves possession of the account credentials.
+  if ((user.email || "").toLowerCase() !== "admin1@mmcponsel.app") {
+    throw new HttpsError("permission-denied", "Akun Firebase bukan akun admin MMC PONSEL.");
   }
   await admin.auth().setCustomUserClaims(user.uid, {...(user.customClaims || {}), admin: true});
   return {ok: true};
