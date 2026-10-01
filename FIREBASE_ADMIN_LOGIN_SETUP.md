@@ -10,7 +10,7 @@ Di Firebase Console buka **Authentication → Sign-in method → Email/Password*
 
 Di **Authentication → Users**, buat satu akun admin dengan email:
 
-`miss@mmcponsel.app`
+`admin1@mmcponsel.app`
 
 Buat password admin sendiri dan tandai/verifikasi email akun tersebut. Jangan menaruh password itu di GitHub atau source code.
 
@@ -22,13 +22,13 @@ Dari root project jalankan:
 firebase deploy --only functions
 ```
 
-Function `ensureAdminRole` memeriksa bahwa akun yang sedang login adalah `miss@mmcponsel.app` dan emailnya sudah terverifikasi, kemudian memberikan custom claim `admin: true`. Custom claims harus ditetapkan dari lingkungan server menggunakan Firebase Admin SDK.
+Function `ensureAdminRole` memeriksa bahwa akun yang sedang login adalah `admin1@mmcponsel.app` dan emailnya sudah terverifikasi, kemudian memberikan custom claim `admin: true`. Custom claims harus ditetapkan dari lingkungan server menggunakan Firebase Admin SDK.
 
 ## 4. Cara login di aplikasi
 
 Halaman login umum tidak menampilkan login admin. Tekan lama logo hacker untuk membuka **Login Admin**, lalu masukkan:
 
-- Username: `miss`
+- Username: `admin1`
 - Password: password akun Firebase admin yang dibuat pada langkah 2
 
 Aplikasi kemudian memanggil `ensureAdminRole` dan menyegarkan sesi admin.
