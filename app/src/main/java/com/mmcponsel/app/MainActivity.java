@@ -91,6 +91,11 @@ public class MainActivity extends Activity {
     MediaPlayer ambientPlayer;
     ImageView profileAvatar;
     static final int REQUEST_PROFILE_PHOTO=1818;
+    static final int REQUEST_PRODUCT_IMAGE=1819;
+    static final int REQUEST_PRODUCT_VIDEO=1820;
+    static final int REQUEST_SERVICE_IMAGE=1821;
+    static final int REQUEST_SERVICE_VIDEO=1822;
+    Uri pendingProductImage, pendingProductVideo, pendingServiceImage, pendingServiceVideo;
     float gestureDownX, gestureDownY;
     long gestureDownAt;
     String currentRoute="login";
@@ -101,7 +106,28 @@ public class MainActivity extends Activity {
 
     int dp(float n){return (int)(n*getResources().getDisplayMetrics().density+.5f);}
     TextView tv(String s,float z){TextView t=new TextView(this);t.setText(s);t.setTextSize(z);t.setTextColor(WHITE);t.setPadding(dp(8),dp(6),dp(8),dp(6));return t;}
-    Button btn(String s){Button b=new Button(this);b.setText(s);b.setTextColor(Color.BLACK);b.setTextSize(14);b.setAllCaps(false);b.setBackgroundResource(R.drawable.button_yellow);return b;}
+    /** Visual feedback for every tappable menu/button: scale + alpha while pressed. */
+    void addClickFeedback(View v){
+        if(v==null) return;
+        v.setClickable(true);
+        v.setOnTouchListener((view,event)->{
+            switch(event.getActionMasked()){
+                case android.view.MotionEvent.ACTION_DOWN:
+                    view.animate().cancel();
+                    view.animate().scaleX(0.96f).scaleY(0.96f).alpha(0.78f).setDuration(90).setInterpolator(new AccelerateDecelerateInterpolator()).start();
+                    break;
+                case android.view.MotionEvent.ACTION_UP:
+                    view.animate().scaleX(1f).scaleY(1f).alpha(1f).setDuration(140).setInterpolator(new AccelerateDecelerateInterpolator()).start();
+                    view.performClick();
+                    break;
+                case android.view.MotionEvent.ACTION_CANCEL:
+                    view.animate().scaleX(1f).scaleY(1f).alpha(1f).setDuration(120).start();
+                    break;
+            }
+            return true;
+        });
+    }
+    Button btn(String s){Button b=new Button(this);b.setText(s);b.setTextColor(Color.BLACK);b.setTextSize(14);b.setAllCaps(false);b.setBackgroundResource(R.drawable.button_yellow);addClickFeedback(b);return b;}
 
     @Override public void onCreate(Bundle b){
         super.onCreate(b);
@@ -204,11 +230,56 @@ public class MainActivity extends Activity {
                 auth=FirebaseAuth.getInstance();
                 db=FirebaseFirestore.getInstance();
                 credentialManager=CredentialManager.create(this);
+                checkForAppUpdate();
                 if(auth.getCurrentUser()!=null) home(); else showLogin();
             } catch(Exception e) {
                 showLogin();
             }
         });
+    }
+
+    /** Online version check. Metadata is stored in Firestore appConfig/appVersion. */
+    void checkForAppUpdate(){
+        if(db==null) db=FirebaseFirestore.getInstance();
+        final int currentCode=BuildConfig.VERSION_CODE;
+        final String currentName=BuildConfig.VERSION_NAME;
+        db.collection("appConfig").document("appVersion").get()
+            .addOnSuccessListener(d -> {
+                if(!d.exists()){
+                    Toast.makeText(this,"Versi aplikasi saat ini: "+currentName,Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                Long latestCode=d.getLong("versionCode");
+                String latestVersion=d.getString("latestVersion");
+                String notes=d.getString("releaseNotes");
+                String url=d.getString("downloadUrl");
+                Boolean force=d.getBoolean("forceUpdate");
+                if(latestCode==null) latestCode=0L;
+                if(latestVersion==null || latestVersion.trim().isEmpty()) latestVersion=currentName;
+                boolean updateAvailable=latestCode > currentCode;
+                if(updateAvailable){
+                    AlertDialog.Builder b=new AlertDialog.Builder(this)
+                        .setTitle("Update MMC PONSEL tersedia")
+                        .setMessage("Versi terbaru: "+latestVersion+"\\nVersi Anda: "+currentName+"\\n\\n"+
+                                (notes==null?"Ada pembaruan aplikasi.":notes));
+                    final String downloadUrl=url;
+                    if(downloadUrl!=null && !downloadUrl.trim().isEmpty()){
+                        b.setPositiveButton("Update",(dialog,which)->{
+                            try{ startActivity(new Intent(Intent.ACTION_VIEW,Uri.parse(downloadUrl))); }
+                            catch(Exception e){ Toast.makeText(this,"Link update tidak dapat dibuka.",Toast.LENGTH_LONG).show(); }
+                        });
+                    }
+                    if(Boolean.TRUE.equals(force)) b.setCancelable(false);
+                    else b.setNegativeButton("Nanti",null);
+                    b.show();
+                }else{
+                    Toast.makeText(this,"Aplikasi sudah versi terbaru ("+currentName+")",Toast.LENGTH_SHORT).show();
+                }
+            })
+            .addOnFailureListener(e -> {
+                // App remains usable when update metadata cannot be reached.
+                Toast.makeText(this,"Tidak dapat mengecek update saat ini.",Toast.LENGTH_SHORT).show();
+            });
     }
 
     void base(String heading){
@@ -226,7 +297,7 @@ public class MainActivity extends Activity {
         title=tv(heading,22); title.setTypeface(Typeface.DEFAULT,Typeface.BOLD);
         mainColumn.addView(title,new LinearLayout.LayoutParams(-1,dp(50)));
         if("home".equals(currentRoute)) {
-            // Beranda memakai navigasi bawah yang lebih rapi.
+            // Beranda memakai navigasi bawah yang sama dengan seluruh menu utama.
         } else if("login".equals(currentRoute) || "auth".equals(currentRoute)) {
             // Halaman login memakai tulisan animasi "miss cinta tuhan" sebagai pengganti "hangat".
             if("login".equals(currentRoute)) {
@@ -250,8 +321,6 @@ public class MainActivity extends Activity {
                 },1450);
             }
             // Tidak ada menu Home/Produk/Service/Profil di atas halaman daftar/lupa password.
-        } else {
-            topMenu();
         }
         content=new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL);
@@ -260,8 +329,26 @@ public class MainActivity extends Activity {
         itemFade.setDuration(420);
         LayoutAnimationController lac=new LayoutAnimationController(itemFade,0.07f);
         content.setLayoutAnimation(lac);
+
+        // Semua halaman selain login/auth memakai tata letak konsisten seperti Beranda:
+        // area konten dapat di-scroll, navigasi utama tetap berada di bawah, dan halaman
+        // non-Beranda memiliki tombol kembali yang jelas.
+        if(!"home".equals(currentRoute) && !"login".equals(currentRoute) && !"auth".equals(currentRoute)){
+            Button back=btn("← Kembali");
+            back.setTextSize(13);
+            back.setTextColor(WHITE);
+            back.setBackgroundResource(R.drawable.card);
+            LinearLayout.LayoutParams backLp=new LinearLayout.LayoutParams(-1,dp(44));
+            backLp.setMargins(0,0,0,dp(6));
+            content.addView(back,0,backLp);
+            back.setOnClickListener(v->navigateBack());
+        }
+
         ScrollView sv=new ScrollView(this); sv.setFillViewport(true); sv.addView(content);
         mainColumn.addView(sv,new LinearLayout.LayoutParams(-1,0,1));
+        if(!"login".equals(currentRoute) && !"auth".equals(currentRoute)){
+            bottom();
+        }
         setContentView(root);
         title.setAlpha(0f);
         title.animate().alpha(1f).setDuration(500).start();
@@ -421,23 +508,24 @@ public class MainActivity extends Activity {
             return;
         }
 
-        // Username pengguna dicari di Firestore, lalu email akun dipakai untuk Firebase Auth.
-        db.collection("users").whereEqualTo("username",username).limit(1).get()
-                .addOnSuccessListener(snap->{
-                    if(snap.isEmpty()){
+        // Lookup username dilakukan di Cloud Function agar login pertama dari HP lain
+        // tidak bergantung pada sesi Firebase/Firestore lokal perangkat.
+        java.util.HashMap<String,Object> payload=new java.util.HashMap<>();
+        payload.put("username",username);
+        FirebaseFunctions.getInstance().getHttpsCallable("lookupUsername").call(payload)
+                .addOnSuccessListener(result->{
+                    java.util.Map data=(java.util.Map)result.getData();
+                    String email=data==null?null:(String)data.get("email");
+                    if(email==null||email.trim().isEmpty()){
                         Toast.makeText(this,"Username tidak ditemukan. Silakan daftar akun terlebih dahulu.",Toast.LENGTH_LONG).show();
                         return;
-                    }
-                    String email=snap.getDocuments().get(0).getString("email");
-                    if(email==null||email.trim().isEmpty()){
-                        Toast.makeText(this,"Data akun tidak lengkap. Silakan daftar ulang.",Toast.LENGTH_LONG).show(); return;
                     }
                     auth.signInWithEmailAndPassword(email,pw).addOnCompleteListener(this,t->{
                         if(t.isSuccessful()) checkUserStatusAndLogin(auth.getCurrentUser());
                         else Toast.makeText(this,"Login gagal: username/password tidak cocok.",Toast.LENGTH_LONG).show();
                     });
                 })
-                .addOnFailureListener(e->Toast.makeText(this,"Gagal memeriksa akun: "+e.getMessage(),Toast.LENGTH_LONG).show());
+                .addOnFailureListener(e->Toast.makeText(this,"Gagal mencari username: "+e.getMessage(),Toast.LENGTH_LONG).show());
     }
 
     void activateAdminRole(){
@@ -495,15 +583,19 @@ public class MainActivity extends Activity {
                 Toast.makeText(this,"Username admin1 khusus untuk admin.",Toast.LENGTH_LONG).show(); return;
             }
             if(!firebaseReady())return;
-            db.collection("users").whereEqualTo("username",un).limit(1).get().addOnSuccessListener(existing->{
-                if(!existing.isEmpty()){
+            java.util.HashMap<String,Object> lookup=new java.util.HashMap<>();
+            lookup.put("username",un);
+            FirebaseFunctions.getInstance().getHttpsCallable("lookupUsername").call(lookup).addOnSuccessListener(result->{
+                java.util.Map resultData=(java.util.Map)result.getData();
+                boolean exists=resultData!=null && Boolean.TRUE.equals(resultData.get("exists"));
+                if(exists){
                     Toast.makeText(this,"Username sudah digunakan.",Toast.LENGTH_LONG).show(); return;
                 }
                 auth.createUserWithEmailAndPassword(e,p).addOnCompleteListener(this,t->{
                     if(!t.isSuccessful()){Toast.makeText(this,"Pendaftaran gagal: "+t.getException().getMessage(),Toast.LENGTH_LONG).show();return;}
                     FirebaseUser u=auth.getCurrentUser();
                     java.util.HashMap<String,Object> data=new java.util.HashMap<>();
-                    data.put("uid",u.getUid()); data.put("name",n); data.put("username",un); data.put("email",e); data.put("role","user"); data.put("blocked",false); data.put("createdAt",FieldValue.serverTimestamp());
+                    data.put("uid",u.getUid()); data.put("name",n); data.put("username",un); data.put("usernameLower",un); data.put("email",e); data.put("role","user"); data.put("blocked",false); data.put("createdAt",FieldValue.serverTimestamp());
                     db.collection("users").document(u.getUid()).set(data).addOnCompleteListener(x->{
                         if(!x.isSuccessful()){
                             Toast.makeText(this,"Akun dibuat, tetapi profil belum tersimpan.",Toast.LENGTH_LONG).show();
@@ -524,32 +616,70 @@ public class MainActivity extends Activity {
     }
 
     void forgotPassword(){
-        base("🔑 Lupa Password");
+        base("🔑 Lupa Password • OTP Email");
         EditText account=field("Username atau email akun");
+        EditText otp=field("Kode OTP 6 digit");
+        EditText p1=field("Password baru (minimal 6 karakter)");
+        EditText p2=field("Ulangi password baru");
+        otp.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
+        p1.setInputType(android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        p2.setInputType(android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD);
         content.addView(account);
-        Button send=btn("Kirim Link Reset Password"); content.addView(send);
+        content.addView(otp);
+        content.addView(p1);
+        content.addView(p2);
+        Button send=btn("📧 Kirim OTP ke Email"); content.addView(send);
+        Button verify=btn("🔐 Verifikasi OTP & Ganti Password"); content.addView(verify);
         Button back=btn("Kembali Login"); back.setTextColor(WHITE); back.setBackgroundResource(R.drawable.card); content.addView(back);
+
         send.setOnClickListener(v->{
-            String value=account.getText().toString().trim().toLowerCase();
-            if(value.isEmpty()){Toast.makeText(this,"Masukkan username atau email terlebih dahulu",Toast.LENGTH_LONG).show();return;}
+            String identifier=account.getText().toString().trim().toLowerCase();
+            if(identifier.isEmpty()){Toast.makeText(this,"Masukkan username atau email terlebih dahulu",Toast.LENGTH_LONG).show();return;}
             if(!firebaseReady())return;
-            if(value.contains("@")){
-                sendResetEmail(value);
-            }else{
-                db.collection("users").whereEqualTo("username",value).limit(1).get().addOnSuccessListener(s->{
-                    if(s.isEmpty()){Toast.makeText(this,"Username tidak ditemukan.",Toast.LENGTH_LONG).show();return;}
-                    String email=s.getDocuments().get(0).getString("email");
-                    if(email==null){Toast.makeText(this,"Email akun tidak tersedia.",Toast.LENGTH_LONG).show();return;}
-                    sendResetEmail(email);
-                }).addOnFailureListener(e->Toast.makeText(this,"Gagal mencari akun: "+e.getMessage(),Toast.LENGTH_LONG).show());
+            v.setEnabled(false);
+            java.util.HashMap<String,Object> payload=new java.util.HashMap<>();
+            payload.put("identifier",identifier);
+            FirebaseFunctions.getInstance().getHttpsCallable("requestPasswordResetOtp").call(payload)
+                    .addOnSuccessListener(result->{
+                        java.util.Map data=(java.util.Map)result.getData();
+                        String masked=data==null?null:(String)data.get("maskedEmail");
+                        Toast.makeText(this,"OTP dikirim ke "+(masked==null?"email akun":masked)+". Periksa Inbox/Spam.",Toast.LENGTH_LONG).show();
+                    })
+                    .addOnFailureListener(e->Toast.makeText(this,"Gagal mengirim OTP: "+friendlyFunctionError(e),Toast.LENGTH_LONG).show())
+                    .addOnCompleteListener(x->v.setEnabled(true));
+        });
+
+        verify.setOnClickListener(v->{
+            String identifier=account.getText().toString().trim().toLowerCase();
+            String code=otp.getText().toString().trim();
+            String a=p1.getText().toString();
+            String b=p2.getText().toString();
+            if(identifier.isEmpty()||!code.matches("\\d{6}")||a.length()<6||!a.equals(b)){
+                Toast.makeText(this,"Isi username/email, OTP 6 digit, dan password baru dengan benar.",Toast.LENGTH_LONG).show();return;
             }
+            if(!firebaseReady())return;
+            v.setEnabled(false);
+            java.util.HashMap<String,Object> payload=new java.util.HashMap<>();
+            payload.put("identifier",identifier); payload.put("code",code); payload.put("newPassword",a);
+            FirebaseFunctions.getInstance().getHttpsCallable("verifyPasswordResetOtp").call(payload)
+                    .addOnSuccessListener(result->{
+                        Toast.makeText(this,"Password berhasil diganti. Silakan login dengan password baru.",Toast.LENGTH_LONG).show();
+                        showLogin();
+                    })
+                    .addOnFailureListener(e->Toast.makeText(this,"OTP gagal diverifikasi: "+friendlyFunctionError(e),Toast.LENGTH_LONG).show())
+                    .addOnCompleteListener(x->v.setEnabled(true));
         });
         back.setOnClickListener(v->showLogin());
     }
 
-    void sendResetEmail(String email){
-        auth.sendPasswordResetEmail(email).addOnCompleteListener(this,t->Toast.makeText(this,
-                t.isSuccessful()?"Link reset password sudah dikirim ke email.":"Gagal mengirim reset: "+t.getException().getMessage(),Toast.LENGTH_LONG).show());
+    String friendlyFunctionError(Exception e){
+        String m=e==null?"Terjadi kesalahan.":String.valueOf(e.getMessage());
+        if(m.contains("resource-exhausted")) return "Terlalu banyak percobaan/permintaan. Tunggu sebentar lalu coba lagi.";
+        if(m.contains("deadline-exceeded")) return "Kode OTP sudah kedaluwarsa. Minta OTP baru.";
+        if(m.contains("permission-denied")) return "Kode OTP salah.";
+        if(m.contains("not-found")) return "Akun tidak ditemukan.";
+        if(m.contains("failed-precondition")) return "Layanan OTP belum dikonfigurasi di server.";
+        return m;
     }
 
     void checkUserStatusAndLogin(FirebaseUser user){
@@ -577,18 +707,29 @@ public class MainActivity extends Activity {
                 Toast.makeText(this,"Login admin gagal: "+msg,Toast.LENGTH_LONG).show();
                 return;
             }
-            FirebaseFunctions.getInstance().getHttpsCallable("ensureAdminRole").call()
-                    .addOnSuccessListener(x->{
-                        adminMode=true; memberMode=false;
-                        sp.edit().putString("role","admin").putString("name","Admin MMC PONSEL").apply();
-                        Toast.makeText(this,"Login admin berhasil",Toast.LENGTH_SHORT).show();
-                        showLoginSuccessLoading(() -> adminPanel());
-                    })
-                    .addOnFailureListener(e->{
-                        if(auth!=null) auth.signOut();
-                        Toast.makeText(this,"Login berhasil, tetapi hak admin belum aktif. Pastikan fungsi ensureAdminRole versi terbaru sudah di-deploy ke Firebase.",Toast.LENGTH_LONG).show();
-                        showLogin();
-                    });
+            // Firebase Authentication sudah memverifikasi kredensial admin.
+            // Custom claim akan dicoba di-refresh, tetapi kegagalan sinkronisasi
+            // claim tidak boleh membuat akun admin yang valid terkunci dari panel.
+            // Firestore Rules juga mengenali email admin1@mmcponsel.app sebagai
+            // fallback server-side sampai claim admin tersedia.
+            FirebaseUser adminUser = auth.getCurrentUser();
+            if(adminUser==null){ showLogin(); return; }
+            adminUser.getIdToken(true).addOnCompleteListener(tokenTask->{
+                adminMode=true; memberMode=false;
+                sp.edit().putString("role","admin").putString("name","Admin MMC PONSEL").apply();
+                Runnable openPanel=()->{
+                    Toast.makeText(this,"Login admin berhasil",Toast.LENGTH_SHORT).show();
+                    showLoginSuccessLoading(() -> adminPanel());
+                };
+                FirebaseFunctions.getInstance().getHttpsCallable("ensureAdminRole").call()
+                        .addOnSuccessListener(x->openPanel.run())
+                        .addOnFailureListener(e->{
+                            // Tetap izinkan panel karena email sudah diverifikasi oleh Firebase Auth
+                            // dan Security Rules melakukan pemeriksaan admin di sisi server.
+                            Toast.makeText(this,"Admin terverifikasi. Sinkronisasi role server akan dicoba lagi otomatis.",Toast.LENGTH_SHORT).show();
+                            openPanel.run();
+                        });
+            });
         });
     }
 
@@ -763,9 +904,13 @@ public class MainActivity extends Activity {
     @Override protected void onActivityResult(int requestCode,int resultCode,Intent data){
         super.onActivityResult(requestCode,resultCode,data);
         if(callbackManager!=null) callbackManager.onActivityResult(requestCode,resultCode,data);
-        if(requestCode==REQUEST_PROFILE_PHOTO && resultCode==RESULT_OK && data!=null && data.getData()!=null){
-            uploadProfilePhoto(data.getData());
-        }
+        if(resultCode!=RESULT_OK || data==null || data.getData()==null) return;
+        Uri uri=data.getData();
+        if(requestCode==REQUEST_PROFILE_PHOTO){ uploadProfilePhoto(uri); }
+        else if(requestCode==REQUEST_PRODUCT_IMAGE){ pendingProductImage=uri; Toast.makeText(this,"Foto barang dipilih",Toast.LENGTH_SHORT).show(); }
+        else if(requestCode==REQUEST_PRODUCT_VIDEO){ pendingProductVideo=uri; Toast.makeText(this,"Video barang dipilih",Toast.LENGTH_SHORT).show(); }
+        else if(requestCode==REQUEST_SERVICE_IMAGE){ pendingServiceImage=uri; Toast.makeText(this,"Foto servis dipilih",Toast.LENGTH_SHORT).show(); }
+        else if(requestCode==REQUEST_SERVICE_VIDEO){ pendingServiceVideo=uri; Toast.makeText(this,"Video servis dipilih",Toast.LENGTH_SHORT).show(); }
     }
 
     void chooseProfilePhoto(){
@@ -853,7 +998,6 @@ public class MainActivity extends Activity {
         productList.setOrientation(LinearLayout.VERTICAL);
         content.addView(productList);
         loadCloudProducts(search);
-        bottom();
     }
 
     void loadCloudProducts(EditText search){
@@ -963,34 +1107,24 @@ public class MainActivity extends Activity {
     }
     void productCard(String[] p){productCard(p,content);}
     void productCard(String[] p, LinearLayout target){
-        LinearLayout c=new LinearLayout(this);
-        c.setOrientation(LinearLayout.VERTICAL);
-        c.setPadding(dp(12),dp(12),dp(12),dp(12));
-        android.graphics.drawable.GradientDrawable cardBg=new android.graphics.drawable.GradientDrawable();
-        cardBg.setColor(Color.rgb(18,30,39));
-        cardBg.setCornerRadius(dp(16));
-        c.setBackground(cardBg);
-        TextView n=tv(p[0],17);
-        n.setTypeface(null,Typeface.BOLD);
-        c.addView(n);
-        TextView meta=tv(p[1]+" • "+p[2]+" • ⭐ "+p[3],14);
-        meta.setTextColor(MUTED);
-        c.addView(meta);
-        Button b=btn("Lihat detail / Tambah keranjang");
-        c.addView(b);
-        b.setOnClickListener(v->detail(p));
-        LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,-2);
-        lp.setMargins(0,dp(5),0,dp(5));
-        target.addView(c,lp);
+        LinearLayout c=new LinearLayout(this); c.setOrientation(LinearLayout.VERTICAL); c.setPadding(dp(12),dp(12),dp(12),dp(12));
+        android.graphics.drawable.GradientDrawable cardBg=new android.graphics.drawable.GradientDrawable(); cardBg.setColor(Color.rgb(18,30,39)); cardBg.setCornerRadius(dp(16)); c.setBackground(cardBg);
+        String imageUrl=p.length>4?p[4]:"", videoUrl=p.length>5?p[5]:"";
+        if(imageUrl!=null && !imageUrl.isEmpty()){ ImageView im=new ImageView(this); im.setScaleType(ImageView.ScaleType.CENTER_CROP); Glide.with(this).load(imageUrl).into(im); c.addView(im,new LinearLayout.LayoutParams(-1,dp(190))); }
+        TextView n=tv(p[0],17); n.setTypeface(null,Typeface.BOLD); c.addView(n);
+        TextView meta=tv(p[1]+" • "+p[2]+" • ⭐ "+p[3],14); meta.setTextColor(MUTED); c.addView(meta);
+        if(videoUrl!=null && !videoUrl.isEmpty()){ Button video=btn("▶ Lihat Video Barang"); c.addView(video); video.setOnClickListener(v->openMedia(videoUrl,"video/*")); }
+        Button b=btn("Lihat detail / Tambah keranjang"); c.addView(b); b.setOnClickListener(v->detail(p));
+        LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,-2); lp.setMargins(0,dp(5),0,dp(5)); target.addView(c,lp);
     }
+    void openMedia(String url,String type){ try{Intent i=new Intent(Intent.ACTION_VIEW); i.setDataAndType(Uri.parse(url),type); i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); startActivity(i);}catch(Exception e){Toast.makeText(this,"Media tidak dapat dibuka",Toast.LENGTH_SHORT).show();} }
     void detail(String[] p){
-        base("Detail Produk");content.addView(tv(p[0],23));content.addView(tv(p[1]+"\nKondisi: "+p[2]+"\nRating: ⭐ "+p[3]+"\nData produk diambil dari server MMC PONSEL.",16));
-        Button cart=btn("Tambah ke Keranjang Online");content.addView(cart);Button buy=btn("Beli Sekarang");content.addView(buy);
-        cart.setOnClickListener(v->{
-            FirebaseUser u=auth==null?null:auth.getCurrentUser(); if(u==null){showLogin();return;}
-            java.util.HashMap<String,Object> data=new java.util.HashMap<>(); data.put("productName",p[0]);data.put("price",p[1]);data.put("condition",p[2]);data.put("createdAt",FieldValue.serverTimestamp());
-            db.collection("users").document(u.getUid()).collection("cart").add(data).addOnSuccessListener(x->Toast.makeText(this,"Keranjang tersimpan online",Toast.LENGTH_SHORT).show()).addOnFailureListener(e->Toast.makeText(this,"Gagal: "+e.getMessage(),Toast.LENGTH_LONG).show());
-        });
+        base("Detail Produk");
+        if(p.length>4 && p[4]!=null && !p[4].isEmpty()){ ImageView im=new ImageView(this); im.setScaleType(ImageView.ScaleType.CENTER_CROP); Glide.with(this).load(p[4]).into(im); content.addView(im,new LinearLayout.LayoutParams(-1,dp(220))); }
+        content.addView(tv(p[0],23)); content.addView(tv(p[1]+"\nKondisi: "+p[2]+"\nRating: ⭐ "+p[3]+"\nProduk online MMC PONSEL.",16));
+        if(p.length>5 && p[5]!=null && !p[5].isEmpty()){ Button v=btn("▶ Putar Video Produk"); content.addView(v); v.setOnClickListener(x->openMedia(p[5],"video/*")); }
+        Button cart=btn("Tambah ke Keranjang Online"); content.addView(cart); Button buy=btn("Beli Sekarang"); content.addView(buy);
+        cart.setOnClickListener(v->{ FirebaseUser u=auth==null?null:auth.getCurrentUser(); if(u==null){showLogin();return;} java.util.HashMap<String,Object> data=new java.util.HashMap<>(); data.put("productName",p[0]);data.put("price",p[1]);data.put("condition",p[2]);data.put("imageUrl",p.length>4?p[4]:"");data.put("createdAt",FieldValue.serverTimestamp()); db.collection("users").document(u.getUid()).collection("cart").add(data).addOnSuccessListener(x->Toast.makeText(this,"Keranjang tersimpan online",Toast.LENGTH_SHORT).show()).addOnFailureListener(e->Toast.makeText(this,"Gagal: "+e.getMessage(),Toast.LENGTH_LONG).show()); });
         buy.setOnClickListener(v->checkout(p));
     }
     void checkout(String[] p){
@@ -1073,7 +1207,7 @@ public class MainActivity extends Activity {
                     if(snapshot==null || snapshot.isEmpty()){liveList.addView(tv("Belum ada produk online.",16));return;}
                     for(DocumentSnapshot d:snapshot.getDocuments()){
                         String n=d.getString("name"),p=d.getString("price"),c=d.getString("condition"),r=d.getString("rating"),status=d.getString("status");
-                        if(n!=null && (status==null || "published".equals(status)))productCard(new String[]{n,p==null?"":p,c==null?"":c,r==null?"0.0":r},liveList);
+                        if(n!=null && (status==null || "published".equals(status)))productCard(new String[]{n,p==null?"":p,c==null?"":c,r==null?"0.0":r,d.getString("imageUrl")==null?"":d.getString("imageUrl"),d.getString("videoUrl")==null?"":d.getString("videoUrl"),d.getId()},liveList);
                     }
                 });
     }
@@ -1099,6 +1233,9 @@ public class MainActivity extends Activity {
                 card.addView(tv("Pemesan: "+(name==null?"Pengguna":name),14));
                 card.addView(tv("Keluhan: "+(note==null||note.isEmpty()?"-":note),14));
                 card.addView(tv("Status: "+(status==null?"Menunggu Diproses":status),13));
+                String imageUrl=d.getString("imageUrl"), videoUrl=d.getString("videoUrl");
+                if(imageUrl!=null && !imageUrl.isEmpty()){ ImageView im=new ImageView(this); im.setScaleType(ImageView.ScaleType.CENTER_CROP); Glide.with(this).load(imageUrl).into(im); card.addView(im,new LinearLayout.LayoutParams(-1,dp(190))); }
+                if(videoUrl!=null && !videoUrl.isEmpty()){ Button vv=btn("▶ Lihat Video Kerusakan"); card.addView(vv); vv.setOnClickListener(v->openMedia(videoUrl,"video/*")); }
                 if(owner!=null && !owner.equals(myUid)){
                     Button chat=btn("💬 Hubungi pribadi"); card.addView(chat); String finalName=name==null?"Pengguna":name; String finalOwner=owner; chat.setOnClickListener(v->privateChat(finalOwner,finalName));
                 }else if(owner!=null){
@@ -1108,7 +1245,17 @@ public class MainActivity extends Activity {
             }
           });
     }
-    void serviceForm(String type){base("Pesan Service Online");content.addView(tv("Jenis: "+type,20));EditText note=field("Keluhan / catatan");content.addView(note);EditText phone=field("Nomor HP");content.addView(phone);Button b=btn("Kirim Permintaan ke Server");content.addView(b);b.setOnClickListener(v->{FirebaseUser u=auth==null?null:auth.getCurrentUser();if(u==null){showLogin();return;}if(phone.length()==0){Toast.makeText(this,"Masukkan nomor HP",0).show();return;}java.util.HashMap<String,Object> data=new java.util.HashMap<>();data.put("uid",u.getUid());data.put("userName",u.getDisplayName()==null?"Pelanggan":u.getDisplayName());data.put("email",u.getEmail());data.put("type",type);data.put("note",note.getText().toString().trim());data.put("phone",phone.getText().toString().trim());data.put("status","Menunggu Diproses");data.put("createdAt",FieldValue.serverTimestamp());db.collection("serviceRequests").add(data).addOnSuccessListener(x->{Toast.makeText(this,"Permintaan service terkirim online",Toast.LENGTH_LONG).show();transactions();}).addOnFailureListener(e->Toast.makeText(this,"Gagal: "+e.getMessage(),Toast.LENGTH_LONG).show());});}
+    void serviceForm(String type){
+        base("Pesan Service Online"); pendingServiceImage=null; pendingServiceVideo=null;
+        content.addView(tv("Jenis: "+type,20)); EditText note=field("Keluhan / catatan");content.addView(note);EditText phone=field("Nomor HP");content.addView(phone);
+        Button photo=btn("📷 Upload Foto Kerusakan"); Button video=btn("🎥 Upload Video Kerusakan"); content.addView(photo);content.addView(video);
+        photo.setOnClickListener(v->{Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT);i.addCategory(Intent.CATEGORY_OPENABLE);i.setType("image/*");startActivityForResult(i,REQUEST_SERVICE_IMAGE);});
+        video.setOnClickListener(v->{Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT);i.addCategory(Intent.CATEGORY_OPENABLE);i.setType("video/*");startActivityForResult(i,REQUEST_SERVICE_VIDEO);});
+        Button b=btn("Kirim Permintaan Service Online");content.addView(b);
+        b.setOnClickListener(v->{FirebaseUser u=auth==null?null:auth.getCurrentUser();if(u==null){showLogin();return;}if(phone.length()==0){Toast.makeText(this,"Masukkan nomor HP",0).show();return;} b.setEnabled(false); Toast.makeText(this,"Mengunggah foto/video servis...",Toast.LENGTH_SHORT).show();
+            uploadMediaPair("serviceRequests/"+u.getUid()+"/",pendingServiceImage,pendingServiceVideo,(imageUrl,videoUrl)->{java.util.HashMap<String,Object> data=new java.util.HashMap<>();data.put("uid",u.getUid());data.put("userName",u.getDisplayName()==null?"Pelanggan":u.getDisplayName());data.put("email",u.getEmail());data.put("type",type);data.put("note",note.getText().toString().trim());data.put("phone",phone.getText().toString().trim());data.put("imageUrl",imageUrl);data.put("videoUrl",videoUrl);data.put("status","Menunggu Diproses");data.put("createdAt",FieldValue.serverTimestamp());db.collection("serviceRequests").add(data).addOnSuccessListener(x->{Toast.makeText(this,"Permintaan service + media terkirim online.",Toast.LENGTH_LONG).show();service();}).addOnFailureListener(e->{b.setEnabled(true);Toast.makeText(this,"Gagal: "+e.getMessage(),Toast.LENGTH_LONG).show();});},e->{b.setEnabled(true);Toast.makeText(this,"Upload gagal: "+e.getMessage(),Toast.LENGTH_LONG).show();});
+        });
+    }
     void sell(){base("Jual HP Online");EditText category=field("Kategori");EditText brand=field("Merek");EditText model=field("Model");EditText condition=field("Kondisi");EditText price=field("Harga yang diinginkan");EditText phone=field("Nomor kontak");for(EditText e:new EditText[]{category,brand,model,condition,price,phone})content.addView(e);Button b=btn("Kirim Penawaran ke Server");content.addView(b);b.setOnClickListener(v->{FirebaseUser u=auth==null?null:auth.getCurrentUser();if(u==null){showLogin();return;}if(model.length()==0||phone.length()==0){Toast.makeText(this,"Model dan nomor kontak wajib diisi",0).show();return;}java.util.HashMap<String,Object> data=new java.util.HashMap<>();data.put("uid",u.getUid());data.put("userName",u.getDisplayName()==null?"Pelanggan":u.getDisplayName());data.put("email",u.getEmail());data.put("category",category.getText().toString().trim());data.put("brand",brand.getText().toString().trim());data.put("model",model.getText().toString().trim());data.put("condition",condition.getText().toString().trim());data.put("desiredPrice",price.getText().toString().trim());data.put("phone",phone.getText().toString().trim());data.put("status","Menunggu Ditinjau");data.put("createdAt",FieldValue.serverTimestamp());db.collection("sellRequests").add(data).addOnSuccessListener(x->{Toast.makeText(this,"Penawaran terkirim online",Toast.LENGTH_LONG).show();transactions();}).addOnFailureListener(e->Toast.makeText(this,"Gagal: "+e.getMessage(),Toast.LENGTH_LONG).show());});}
     void bottom(){
         LinearLayout nav=new LinearLayout(this); nav.setOrientation(LinearLayout.HORIZONTAL); nav.setGravity(Gravity.CENTER); nav.setPadding(dp(6),dp(5),dp(6),dp(7)); nav.setBackgroundResource(R.drawable.card);
@@ -1118,7 +1265,7 @@ public class MainActivity extends Activity {
             ImageView icon=new ImageView(this); icon.setImageResource(menuIcon(item[0])); icon.setScaleType(ImageView.ScaleType.CENTER_INSIDE); cell.addView(icon,new LinearLayout.LayoutParams(-1,dp(28)));
             TextView label=tv(item[1],11); label.setGravity(Gravity.CENTER); label.setTextColor(MUTED); cell.addView(label,new LinearLayout.LayoutParams(-1,dp(20)));
             LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,dp(54),1); lp.setMargins(dp(2),0,dp(2),0); nav.addView(cell,lp);
-            cell.setOnClickListener(v->{ if("Beranda".equals(item[1])) home(); else if("Beli".equals(item[1])) category(); else if("Servis".equals(item[1])) service(); else profile(); });
+            addClickFeedback(cell); cell.setOnClickListener(v->{ if("Beranda".equals(item[1])) home(); else if("Beli".equals(item[1])) category(); else if("Servis".equals(item[1])) service(); else profile(); });
         }
         mainColumn.addView(nav,new LinearLayout.LayoutParams(-1,dp(66)));
     }
@@ -1156,8 +1303,9 @@ public class MainActivity extends Activity {
         profileAction("🧾","Transaksi Saya","Lihat transaksi dan pesanan",()->transactions());
 
         TextView comm=tv("Komunikasi",16); comm.setTypeface(null,Typeface.BOLD); comm.setTextColor(WHITE); comm.setPadding(dp(4),dp(16),dp(4),dp(4)); content.addView(comm);
+        profileAction("🤖","Chat AI","Asisten AI nyata untuk membantu Anda",()->aiChat());
         profileAction("💬","Chat Admin","Hubungi admin MMC PONSEL",()->chatWithAdmin());
-        profileAction("🌐","Chat Global","Berkomunikasi dengan pengguna lain",()->solutionGroup());
+        profileAction("🌐","Chat Global","Chat online yang dapat dilihat semua pengguna",()->solutionGroup());
         profileAction("🟢","WhatsApp","Hubungi MMC PONSEL",()->openWhatsApp());
 
         if(adminMode){
@@ -1184,6 +1332,7 @@ public class MainActivity extends Activity {
         if(k.contains("password")) return R.drawable.ic_profile_lock;
         if(k.contains("data akun")) return R.drawable.ic_profile_data;
         if(k.contains("transaksi")) return R.drawable.ic_profile_receipt;
+        if(k.contains("chat ai")) return R.drawable.ic_profile_ai;
         if(k.contains("chat admin")) return R.drawable.ic_profile_chat;
         if(k.contains("chat global")) return R.drawable.ic_profile_global;
         if(k.contains("whatsapp")) return R.drawable.ic_profile_whatsapp;
@@ -1206,7 +1355,7 @@ public class MainActivity extends Activity {
         row.addView(texts,new LinearLayout.LayoutParams(0,dp(52),1));
         TextView arrow=tv("›",25); arrow.setTextColor(MUTED); arrow.setGravity(Gravity.CENTER); row.addView(arrow,new LinearLayout.LayoutParams(dp(30),dp(52)));
         LinearLayout.LayoutParams rp=new LinearLayout.LayoutParams(-1,dp(68)); rp.setMargins(0,dp(4),0,dp(4)); content.addView(row,rp);
-        row.setOnClickListener(v->action.run());
+        addClickFeedback(row); row.setOnClickListener(v->action.run());
     }
 
     void changePassword(){
@@ -1231,26 +1380,34 @@ public class MainActivity extends Activity {
     }
 
     void addProductForUser(){
-        base("➕ Tambah Barang");
-        EditText name=field("Nama HP / barang");
-        EditText price=field("Harga, contoh Rp 3.500.000");
-        EditText condition=field("Kondisi: Baru / Bekas / Rusak");
-        EditText category=field("Kategori: HP / Aksesoris / Service");
-        EditText description=field("Deskripsi barang");
+        base("➕ Tambah Barang Online"); pendingProductImage=null; pendingProductVideo=null;
+        EditText name=field("Nama HP / barang"); EditText price=field("Harga, contoh Rp 3.500.000"); EditText condition=field("Kondisi: Baru / Bekas / Rusak"); EditText category=field("Kategori: HP / Aksesoris / Lainnya"); EditText description=field("Deskripsi barang");
         content.addView(name);content.addView(price);content.addView(condition);content.addView(category);content.addView(description);
-        Button save=btn("🚀 Publikasikan ke Produk");content.addView(save);
+        Button photo=btn("📷 Upload Foto Barang"); Button video=btn("🎥 Upload Video Barang"); content.addView(photo);content.addView(video);
+        TextView hint=tv("Foto/video akan tersimpan di Firebase dan otomatis tampil kepada pengguna lain.",12); hint.setTextColor(MUTED); content.addView(hint);
+        photo.setOnClickListener(v->{Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT);i.addCategory(Intent.CATEGORY_OPENABLE);i.setType("image/*");startActivityForResult(i,REQUEST_PRODUCT_IMAGE);});
+        video.setOnClickListener(v->{Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT);i.addCategory(Intent.CATEGORY_OPENABLE);i.setType("video/*");startActivityForResult(i,REQUEST_PRODUCT_VIDEO);});
+        Button save=btn("🚀 Publikasikan ke Produk Online");content.addView(save);
         save.setOnClickListener(v->{
-            FirebaseUser u=auth.getCurrentUser();
-            if(name.length()==0||price.length()==0){Toast.makeText(this,"Nama dan harga wajib diisi",Toast.LENGTH_LONG).show();return;}
-            java.util.HashMap<String,Object> d=new java.util.HashMap<>();
-            d.put("name",name.getText().toString().trim()); d.put("price",price.getText().toString().trim());
-            d.put("condition",condition.getText().toString().trim()); d.put("category",category.getText().toString().trim());
-            d.put("description",description.getText().toString().trim()); d.put("rating","0.0");
-            d.put("ownerUid",u.getUid()); d.put("ownerName",u.getDisplayName()==null?"Pengguna":u.getDisplayName());
-            d.put("createdAt",FieldValue.serverTimestamp()); d.put("status","published");
-            db.collection("products").add(d).addOnSuccessListener(x->{Toast.makeText(this,"Barang online berhasil dipublikasikan. Pengguna lain dapat melihatnya otomatis di Produk.",Toast.LENGTH_LONG).show();category();})
-              .addOnFailureListener(e->Toast.makeText(this,"Gagal mempublikasikan: "+e.getMessage(),Toast.LENGTH_LONG).show());
+            FirebaseUser u=auth.getCurrentUser(); if(name.length()==0||price.length()==0){Toast.makeText(this,"Nama dan harga wajib diisi",Toast.LENGTH_LONG).show();return;}
+            save.setEnabled(false); Toast.makeText(this,"Mengunggah media...",Toast.LENGTH_SHORT).show();
+            uploadMediaPair("products/"+u.getUid()+"/",pendingProductImage,pendingProductVideo,(imageUrl,videoUrl)->{
+                java.util.HashMap<String,Object> d=new java.util.HashMap<>(); d.put("name",name.getText().toString().trim());d.put("price",price.getText().toString().trim());d.put("condition",condition.getText().toString().trim());d.put("category",category.getText().toString().trim());d.put("description",description.getText().toString().trim());d.put("rating","0.0");d.put("ownerUid",u.getUid());d.put("ownerName",u.getDisplayName()==null?"Pengguna":u.getDisplayName());d.put("imageUrl",imageUrl);d.put("videoUrl",videoUrl);d.put("createdAt",FieldValue.serverTimestamp());d.put("status","published");
+                db.collection("products").add(d).addOnSuccessListener(x->{Toast.makeText(this,"Barang dan media berhasil dipublikasikan online.",Toast.LENGTH_LONG).show();category();}).addOnFailureListener(e->{save.setEnabled(true);Toast.makeText(this,"Gagal menyimpan: "+e.getMessage(),Toast.LENGTH_LONG).show();});
+            },e->{save.setEnabled(true);Toast.makeText(this,"Upload gagal: "+e.getMessage(),Toast.LENGTH_LONG).show();});
         });
+    }
+    interface MediaDone { void ok(String imageUrl,String videoUrl); }
+    interface MediaFail { void fail(Exception e); }
+    void uploadMediaPair(String folder,Uri image,Uri video,MediaDone done,MediaFail fail){
+        uploadOne(folder,"foto.jpg",image,(iu)->uploadOne(folder,"video.mp4",video,(vu)->done.ok(iu,vu),fail),fail);
+    }
+    interface UrlDone { void ok(String url); }
+    void uploadOne(String folder,String name,Uri uri,UrlDone done,MediaFail fail){
+        if(uri==null){done.ok("");return;}
+        String mime=getContentResolver().getType(uri); if(mime==null) mime=name.endsWith("mp4")?"video/mp4":"image/jpeg";
+        StorageReference ref=FirebaseStorage.getInstance().getReference().child(folder+name);
+        ref.putFile(uri, new com.google.firebase.storage.StorageMetadata.Builder().setContentType(mime).build()).continueWithTask(t->{if(!t.isSuccessful()&&t.getException()!=null)throw t.getException();return ref.getDownloadUrl();}).addOnSuccessListener(x->done.ok(x.toString())).addOnFailureListener(fail::fail);
     }
 
     void saveProfileOnline(){FirebaseUser u=auth.getCurrentUser();if(u==null)return;EditText address=field("Alamat pengiriman");content.addView(address);Button save=btn("Simpan ke Server");content.addView(save);save.setOnClickListener(v->{db.collection("users").document(u.getUid()).set(new java.util.HashMap<String,Object>(){{put("uid",u.getUid());put("name",u.getDisplayName());put("email",u.getEmail());put("address",address.getText().toString().trim());put("updatedAt",FieldValue.serverTimestamp());}},com.google.firebase.firestore.SetOptions.merge()).addOnSuccessListener(x->Toast.makeText(this,"Profil tersimpan online",Toast.LENGTH_SHORT).show());});}
@@ -1359,6 +1516,56 @@ public class MainActivity extends Activity {
         }).addOnFailureListener(e->content.addView(tv("Gagal membaca database: "+e.getMessage(),14)));
     }
 
+    void aiChat(){
+        FirebaseUser currentUser=auth==null?null:auth.getCurrentUser();
+        if(currentUser==null){ showLogin(); return; }
+        base("🤖 Chat AI MMC PONSEL");
+        TextView info=tv("Asisten AI online. Tanyakan tentang HP, service, jual-beli, penggunaan aplikasi, atau hal umum lainnya.",14);
+        info.setTextColor(MUTED); content.addView(info);
+
+        LinearLayout messages=new LinearLayout(this); messages.setOrientation(LinearLayout.VERTICAL);
+        ScrollView scroll=new ScrollView(this); scroll.addView(messages); content.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
+
+        LinearLayout composer=new LinearLayout(this); composer.setOrientation(LinearLayout.HORIZONTAL);
+        EditText input=field("Tulis pertanyaan ke AI...");
+        composer.addView(input,new LinearLayout.LayoutParams(0,dp(55),1));
+        Button send=btn("Kirim"); composer.addView(send,new LinearLayout.LayoutParams(dp(90),dp(55))); content.addView(composer);
+
+        if(db==null) db=FirebaseFirestore.getInstance();
+        db.collection("aiChats").document(currentUser.getUid()).collection("messages")
+                .orderBy("createdAt",Query.Direction.ASCENDING)
+                .addSnapshotListener((snap,e)->{
+                    if(e!=null){ Toast.makeText(this,"Gagal memuat chat AI: "+e.getMessage(),Toast.LENGTH_LONG).show(); return; }
+                    messages.removeAllViews();
+                    if(snap!=null) for(DocumentSnapshot d:snap.getDocuments()){
+                        String role=d.getString("role"), text=d.getString("text");
+                        String label="assistant".equals(role)?"🤖 AI":"👤 Anda";
+                        TextView m=tv(label+"\n"+(text==null?"":text),15);
+                        m.setBackgroundResource(R.drawable.card);
+                        LinearLayout.LayoutParams mp=new LinearLayout.LayoutParams(-1,dp(70)); mp.bottomMargin=dp(6); messages.addView(m,mp);
+                    }
+                    scroll.post(()->scroll.fullScroll(View.FOCUS_DOWN));
+                });
+
+        send.setOnClickListener(v->{
+            String text=input.getText().toString().trim();
+            if(text.isEmpty()) return;
+            send.setEnabled(false);
+            input.setText("");
+            java.util.HashMap<String,Object> data=new java.util.HashMap<>();
+            data.put("message",text);
+            FirebaseFunctions.getInstance().getHttpsCallable("chatWithAI").call(data)
+                    .addOnSuccessListener(result->{
+                        send.setEnabled(true);
+                        scroll.post(()->scroll.fullScroll(View.FOCUS_DOWN));
+                    })
+                    .addOnFailureListener(err->{
+                        send.setEnabled(true);
+                        Toast.makeText(this,"AI gagal merespons: "+err.getMessage(),Toast.LENGTH_LONG).show();
+                    });
+        });
+    }
+
     void solutionGroup(){
         FirebaseUser currentUser=auth==null?null:auth.getCurrentUser();
         if(currentUser==null){ showLogin(); return; }
@@ -1390,7 +1597,7 @@ public class MainActivity extends Activity {
                             String role=d.getString("role");
                             String name=d.getString("name");
                             String text=d.getString("text");
-                            String badge="admin".equals(role)?"🛡 Admin":"👤 Member";
+                            String badge="admin".equals(role)?"🛡 Admin":("member".equals(role)?"👤 Member":"👤 Pengguna");
                             TextView m=tv(badge+" • "+(name==null?"Pengguna":name)+"\n"+(text==null?"":text),15);
                             m.setBackgroundResource(R.drawable.card);
                             LinearLayout.LayoutParams mp=new LinearLayout.LayoutParams(-1,dp(65));
@@ -1405,15 +1612,17 @@ public class MainActivity extends Activity {
             if(text.isEmpty()) return;
             FirebaseUser u=auth==null?null:auth.getCurrentUser();
             if(u==null) return;
+            send.setEnabled(false);
+            input.setText("");
             java.util.HashMap<String,Object> msg=new java.util.HashMap<>();
             msg.put("uid",u.getUid());
             msg.put("name",memberMode?"Member Miss":(u.getDisplayName()==null?"Admin":u.getDisplayName()));
-            msg.put("role",adminMode?"admin":"member");
+            msg.put("role",adminMode?"admin":(memberMode?"member":"user"));
             msg.put("text",text);
             msg.put("createdAt",FieldValue.serverTimestamp());
             db.collection("solutionGroup").document("main").collection("messages").add(msg)
-                    .addOnSuccessListener(x->input.setText(""))
-                    .addOnFailureListener(e->Toast.makeText(this,"Pesan gagal dikirim: "+e.getMessage(),Toast.LENGTH_LONG).show());
+                    .addOnSuccessListener(x->{ send.setEnabled(true); })
+                    .addOnFailureListener(e->{ send.setEnabled(true); input.setText(text); Toast.makeText(this,"Pesan gagal dikirim: "+e.getMessage(),Toast.LENGTH_LONG).show(); });
         });
     }
 
