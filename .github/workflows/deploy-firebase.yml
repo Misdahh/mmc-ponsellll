@@ -1,0 +1,92 @@
+name: Deploy Firebase from Browser
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main, master ]
+
+permissions:
+  contents: read
+
+jobs:
+  deploy-firebase:
+    runs-on: ubuntu-latest
+    env:
+      FIREBASE_PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
+
+    steps:
+      - name: Checkout project
+        uses: actions/checkout@v4
+
+      - name: Validate required secrets
+        shell: bash
+        run: |
+          set -e
+          for name in FIREBASE_PROJECT_ID FIREBASE_SERVICE_ACCOUNT RESEND_API_KEY RESEND_FROM; do
+            if [ -z "${!name}" ]; then
+              echo "GitHub Secret $name belum diisi."
+              exit 1
+            fi
+          done
+
+      - name: Write service account
+        shell: bash
+        run: |
+          printf '%s' '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}' > "$RUNNER_TEMP/firebase-service-account.json"
+
+      - name: Authenticate Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+
+      - name: Setup gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Firebase secrets in Secret Manager
+        shell: bash
+        env:
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          RESEND_FROM: ${{ secrets.RESEND_FROM }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          MIDTRANS_SERVER_KEY: ${{ secrets.MIDTRANS_SERVER_KEY }}
+          MIDTRANS_IS_PRODUCTION: ${{ secrets.MIDTRANS_IS_PRODUCTION }}
+        run: |
+          set -e
+
+          put_secret() {
+            NAME="$1"
+            VALUE="$2"
+
+            if [ -z "$VALUE" ]; then
+              echo "Secret $NAME tidak diisi; dilewati."
+              return 0
+            fi
+
+            if gcloud secrets describe "$NAME" --project "$FIREBASE_PROJECT_ID" >/dev/null 2>&1; then
+              :
+            else
+              gcloud secrets create "$NAME" \
+                --replication-policy="automatic" \
+                --project "$FIREBASE_PROJECT_ID"
+            fi
+
+            printf '%s' "$VALUE" | gcloud secrets versions add "$NAME" \
+              --data-file=- \
+              --project "$FIREBASE_PROJECT_ID"
+          }
+
+          put_secret RESEND_API_KEY "$RESEND_API_KEY"
+          put_secret RESEND_FROM "$RESEND_FROM"
+          put_secret OPENAI_API_KEY "$OPENAI_API_KEY"
+          put_secret MIDTRANS_SERVER_KEY "$MIDTRANS_SERVER_KEY"
+          put_secret MIDTRANS_IS_PRODUCTION "$MIDTRANS_IS_PRODUCTION"
+
+      - name: Deploy Firebase Cloud Functions
+        shell: bash
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/firebase-service-account.json
+        run: |
+          npx --yes firebase-tools@latest deploy \
+            --only functions \
+            --project "$FIREBASE_PROJECT_ID" \
+            --non-interactive
