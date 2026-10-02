@@ -1,7 +1,9 @@
 {
   "name": "mmc-ponsel-functions",
   "private": true,
-  "engines": { "node": "20" },
+  "engines": {
+    "node": "20"
+  },
   "main": "index.js",
   "dependencies": {
     "firebase-admin": "^13.4.0",
