@@ -97,13 +97,13 @@ Pembaruan ini menambahkan:
 - Produk baru otomatis disimpan ke Firestore dengan owner UID dan langsung masuk katalog online.
 - Katalog produk dapat dibaca publik melalui Firestore rules sehingga data katalog tidak terikat satu perangkat.
 - Panel Admin: daftar pengguna, blokir/buka blokir, hapus akun melalui Cloud Function, dan hapus produk pengguna.
-- Login admin memakai Firebase Authentication untuk `miss@mmcponsel.app` dan custom claim admin.
+- Login admin memakai Firebase Authentication untuk `admin1@mmcponsel.app` dan custom claim admin.
 - Latar belakang aplikasi diperbarui menjadi tema hacker/anime bergaya digital dengan animasi code-rain.
 - Password tidak disimpan di aplikasi; reset password menggunakan Firebase Authentication.
 
 ### Admin production setup
 Buat akun Firebase Authentication:
-- Email: `miss@mmcponsel.app`
+- Email: `admin1@mmcponsel.app`
 - Password: buat sendiri di Firebase Console (jangan menanam password di source code).
 
 Setelah login admin pertama kali, aplikasi memanggil `ensureAdminRole`. Cloud Function hanya memberikan claim admin kepada email admin tersebut.
@@ -119,7 +119,7 @@ Untuk akun yang diblokir, aplikasi memeriksa field `blocked` pada dokumen `users
 - Login utama menggunakan username + password.
 - Daftar Akun ditampilkan sebelum tombol Login.
 - Username pengguna disimpan di Firestore dan dipakai untuk mencari email Firebase Authentication.
-- Admin: username `miss`, password `miss11`, dipetakan ke akun Firebase `miss@mmcponsel.app` dan divalidasi melalui fungsi `ensureAdminRole`.
+- Admin: username `admin1`, password `miss11`, dipetakan ke akun Firebase `admin1@mmcponsel.app` dan divalidasi melalui fungsi `ensureAdminRole`.
 - Untuk penggunaan produksi, kredensial admin sebaiknya diganti karena kredensial yang diketahui publik tidak aman.
 
 

@@ -10,6 +10,12 @@ service cloud.firestore {
     }
     function member() { return signedIn() && request.auth.token.member == true; }
 
+    // Public application update metadata. Do not store secrets here.
+    match /appConfig/appVersion {
+      allow read: if true;
+      allow write: if admin();
+    }
+
     match /products/{productId} {
       // Published catalog can be read by anyone using the app, including signed-out visitors.
       allow read: if true;
@@ -60,6 +66,16 @@ service cloud.firestore {
       allow create: if signedIn() && request.auth.uid in request.resource.data.participants;
       match /messages/{messageId} {
         allow read, create: if signedIn() && request.auth.uid in get(/databases/$(database)/documents/privateChats/$(chatId)).data.participants;
+      }
+    }
+
+    match /aiChats/{userId} {
+      allow read, create: if signedIn() && request.auth.uid == userId;
+      allow update, delete: if false;
+      match /messages/{messageId} {
+        // Client reads its own AI history. Messages are written by the trusted Cloud Function.
+        allow read: if signedIn() && request.auth.uid == userId;
+        allow create, update, delete: if false;
       }
     }
 

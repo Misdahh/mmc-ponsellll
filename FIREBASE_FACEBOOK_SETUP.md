@@ -34,7 +34,7 @@ Firebase mendokumentasikan bahwa Google Android sign-in menggunakan Credential M
 3. Login admin di aplikasi menggunakan:
    - Username: `miss`
    - Password: `miss22`
-   - Akun Firebase internal yang dipakai aplikasi: `miss@mmcponsel.app`
+   - Akun Firebase internal yang dipakai aplikasi: `admin1@mmcponsel.app`
 4. Deploy isi `firestore.rules` ke Firestore Rules.
 5. Produk admin disimpan pada collection `products`.
 6. Chat pengguna disimpan pada `chats/{uid}/messages`.

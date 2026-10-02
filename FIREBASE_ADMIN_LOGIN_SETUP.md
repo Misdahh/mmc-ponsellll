@@ -12,7 +12,7 @@ Di **Authentication → Users**, buat satu akun admin dengan email:
 
 `admin1@mmcponsel.app`
 
-Buat password admin sendiri dan tandai/verifikasi email akun tersebut. Jangan menaruh password itu di GitHub atau source code.
+Buat password `miss11` dan tandai/verifikasi email akun tersebut. Jangan menaruh password itu di GitHub atau source code.
 
 ## 3. Deploy Cloud Functions
 
