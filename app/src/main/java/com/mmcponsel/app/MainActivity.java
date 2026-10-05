@@ -243,8 +243,8 @@ public class MainActivity extends Activity {
         if(db==null) db=FirebaseFirestore.getInstance();
         // Ambil versi aplikasi dari PackageManager agar build tidak bergantung
         // pada class BuildConfig yang mungkin tidak digenerate oleh Gradle.
-        final long currentCode;
-        final String currentName;
+        long currentCode = 0L;
+        String currentName = "0.0.0";
         try {
             android.content.pm.PackageInfo packageInfo =
                     getPackageManager().getPackageInfo(getPackageName(), 0);
@@ -255,8 +255,7 @@ public class MainActivity extends Activity {
                     ? "0.0.0"
                     : packageInfo.versionName;
         } catch (Exception e) {
-            currentCode = 0L;
-            currentName = "0.0.0";
+            // Gunakan nilai default jika metadata aplikasi tidak tersedia.
         }
         db.collection("appConfig").document("appVersion").get()
             .addOnSuccessListener(d -> {
