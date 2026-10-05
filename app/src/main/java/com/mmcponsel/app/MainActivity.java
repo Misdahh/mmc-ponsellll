@@ -241,8 +241,23 @@ public class MainActivity extends Activity {
     /** Online version check. Metadata is stored in Firestore appConfig/appVersion. */
     void checkForAppUpdate(){
         if(db==null) db=FirebaseFirestore.getInstance();
-        final int currentCode=BuildConfig.VERSION_CODE;
-        final String currentName=BuildConfig.VERSION_NAME;
+        // Ambil versi aplikasi dari PackageManager agar build tidak bergantung
+        // pada class BuildConfig yang mungkin tidak digenerate oleh Gradle.
+        final long currentCode;
+        final String currentName;
+        try {
+            android.content.pm.PackageInfo packageInfo =
+                    getPackageManager().getPackageInfo(getPackageName(), 0);
+            currentCode = android.os.Build.VERSION.SDK_INT >= 28
+                    ? packageInfo.getLongVersionCode()
+                    : packageInfo.versionCode;
+            currentName = packageInfo.versionName == null
+                    ? "0.0.0"
+                    : packageInfo.versionName;
+        } catch (Exception e) {
+            currentCode = 0L;
+            currentName = "0.0.0";
+        }
         db.collection("appConfig").document("appVersion").get()
             .addOnSuccessListener(d -> {
                 if(!d.exists()){
