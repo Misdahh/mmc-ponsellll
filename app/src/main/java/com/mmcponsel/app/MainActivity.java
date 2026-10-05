@@ -241,35 +241,25 @@ public class MainActivity extends Activity {
     /** Online version check. Metadata is stored in Firestore appConfig/appVersion. */
     void checkForAppUpdate(){
         if(db==null) db=FirebaseFirestore.getInstance();
-        // Ambil versi aplikasi dari PackageManager agar build tidak bergantung
-        // pada class BuildConfig yang mungkin tidak digenerate oleh Gradle.
-        long currentCode = 0L;
-        String currentName = "0.0.0";
-        try {
-            android.content.pm.PackageInfo packageInfo =
-                    getPackageManager().getPackageInfo(getPackageName(), 0);
-            currentCode = android.os.Build.VERSION.SDK_INT >= 28
-                    ? packageInfo.getLongVersionCode()
-                    : packageInfo.versionCode;
-            currentName = packageInfo.versionName == null
-                    ? "0.0.0"
-                    : packageInfo.versionName;
-        } catch (Exception e) {
-            // Gunakan nilai default jika metadata aplikasi tidak tersedia.
-        }
+        final int currentCode=BuildConfig.VERSION_CODE;
+        final String currentName=BuildConfig.VERSION_NAME;
         db.collection("appConfig").document("appVersion").get()
             .addOnSuccessListener(d -> {
                 if(!d.exists()){
                     Toast.makeText(this,"Versi aplikasi saat ini: "+currentName,Toast.LENGTH_SHORT).show();
                     return;
                 }
-                Long latestCode=d.getLong("versionCode");
-                String latestVersion=d.getString("latestVersion");
-                String notes=d.getString("releaseNotes");
-                String url=d.getString("downloadUrl");
-                Boolean force=d.getBoolean("forceUpdate");
-                if(latestCode==null) latestCode=0L;
-                if(latestVersion==null || latestVersion.trim().isEmpty()) latestVersion=currentName;
+                Long latestCodeValue=d.getLong("versionCode");
+                String latestVersionValue=d.getString("latestVersion");
+                String notesValue=d.getString("releaseNotes");
+                String urlValue=d.getString("downloadUrl");
+                Boolean forceValue=d.getBoolean("forceUpdate");
+                final long latestCode = latestCodeValue == null ? 0L : latestCodeValue.longValue();
+                final String latestVersion = (latestVersionValue == null || latestVersionValue.trim().isEmpty())
+                        ? currentName : latestVersionValue;
+                final String notes = notesValue;
+                final String url = urlValue;
+                final Boolean force = forceValue;
                 boolean updateAvailable=latestCode > currentCode;
                 if(updateAvailable){
                     AlertDialog.Builder b=new AlertDialog.Builder(this)
